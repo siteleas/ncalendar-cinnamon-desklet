@@ -1,0 +1,8 @@
+{
+    "uuid": "nextcloudCalendar@javahelps.com",
+    "description": "A desklet that displays your agenda based on NextCloud Calendar",
+    "name": "NextCloud Calendar",
+    "max-instances": "10",
+    "prevent-decorations": true,
+    "cinnamon-version": ["3.4", "3.6", "3.8", "4.0", "4.2", "4.4", "4.6", "5.0", "5.2", "5.4", "5.6", "5.8", "6.0", "6.2"]
+}

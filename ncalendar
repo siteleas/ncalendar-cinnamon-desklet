@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""
+NextCloud Calendar CLI Tool
+A command-line interface for NextCloud calendar access via CalDAV.
+Compatible with gcalendar command-line interface for desklet integration.
+
+Copyright (C) 2025
+License: GPL-3.0-or-later
+"""
+
+import sys
+import argparse
+import json
+import os
+import configparser
+from pathlib import Path
+from datetime import datetime, timedelta
+import requests
+import caldav
+from caldav.lib import error
+from urllib.parse import urljoin
+import uuid
+
+class NextCloudCalendar:
+    def __init__(self):
+        self.config_dir = Path.home() / '.config' / 'ncalendar'
+        self.config_file = self.config_dir / 'config.ini'
+        self.config_dir.mkdir(parents=True, exist_ok=True)
+        self.config = configparser.ConfigParser()
+        self.load_config()
+
+    def load_config(self):
+        """Load configuration from config file."""
+        if self.config_file.exists():
+            self.config.read(self.config_file)
+
+    def save_config(self):
+        """Save configuration to config file."""
+        with open(self.config_file, 'w') as f:
+            self.config.write(f)
+
+    def get_account_config(self, account_id='default'):
+        """Get configuration for specific account."""
+        if account_id not in self.config:
+            return None
+        return dict(self.config[account_id])
+
+    def set_account_config(self, server_url, username, app_password, account_id='default'):
+        """Set configuration for specific account."""
+        if account_id not in self.config:
+            self.config.add_section(account_id)
+        
+        self.config[account_id]['server_url'] = server_url
+        self.config[account_id]['username'] = username  
+        self.config[account_id]['app_password'] = app_password
+        self.save_config()
+
+    def setup_account(self, account_id='default'):
+        """Interactive account setup."""
+        print(f"Setting up NextCloud calendar account: {account_id}")
+        
+        server_url = input("NextCloud server URL (e.g., https://cloud.example.com): ").strip()
+        if not server_url.startswith(('http://', 'https://')):
+            server_url = 'https://' + server_url
+        
+        username = input("Username: ").strip()
+        
+        print("\nTo get an app password:")
+        print(f"1. Go to {server_url}/settings/user/security")
+        print("2. Create a new app password for 'ncalendar'")
+        print("3. Copy the generated password")
+        app_password = input("App password: ").strip()
+        
+        # Test connection
+        try:
+            caldav_url = urljoin(server_url, '/remote.php/dav/')
+            client = caldav.DAVClient(url=caldav_url, username=username, password=app_password)
+            principal = client.principal()
+            calendars = principal.calendars()
+            
+            print(f"✓ Successfully connected! Found {len(calendars)} calendar(s)")
+            self.set_account_config(server_url, username, app_password, account_id)
+            return True
+            
+        except Exception as e:
+            print(f"✗ Connection failed: {e}")
+            return False
+
+    def get_caldav_client(self, account_id='default'):
+        """Get authenticated CalDAV client."""
+        config = self.get_account_config(account_id)
+        if not config:
+            raise Exception(f"Account '{account_id}' not configured. Run: ncalendar --setup --account {account_id}")
+        
+        caldav_url = urljoin(config['server_url'], '/remote.php/dav/')
+        return caldav.DAVClient(
+            url=caldav_url,
+            username=config['username'],
+            password=config['app_password']
+        )
+
+    def list_calendars(self, account_id='default', output='json'):
+        """List available calendars."""
+        try:
+            client = self.get_caldav_client(account_id)
+            principal = client.principal()
+            calendars = principal.calendars()
+            
+            calendar_list = []
+            for cal in calendars:
+                # Get calendar properties
+                props = cal.get_properties([
+                    '{DAV:}displayname',
+                    '{http://apple.com/ns/ical/}calendar-color',
+                    '{urn:ietf:params:xml:ns:caldav}calendar-description'
+                ])
+                
+                cal_info = {
+                    'name': props.get('{DAV:}displayname', 'Unnamed Calendar'),
+                    'url': str(cal.url),
+                    'color': props.get('{http://apple.com/ns/ical/}calendar-color', '#0082c9'),
+                    'description': props.get('{urn:ietf:params:xml:ns:caldav}calendar-description', '')
+                }
+                calendar_list.append(cal_info)
+            
+            if output == 'json':
+                print(json.dumps(calendar_list, indent=2))
+            elif output == 'txt':
+                for cal in calendar_list:
+                    print(cal['name'])
+            
+            return calendar_list
+            
+        except Exception as e:
+            print(f"Error listing calendars: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    def get_events(self, account_id='default', calendar_names=None, days=7, output='json'):
+        """Get events from calendars."""
+        try:
+            client = self.get_caldav_client(account_id)
+            principal = client.principal()
+            calendars = principal.calendars()
+            
+            # Filter calendars by name if specified
+            if calendar_names:
+                cal_names_set = set(calendar_names.split(','))
+                filtered_calendars = []
+                for cal in calendars:
+                    props = cal.get_properties(['{DAV:}displayname'])
+                    cal_name = props.get('{DAV:}displayname', 'Unnamed Calendar')
+                    if cal_name in cal_names_set:
+                        filtered_calendars.append(cal)
+                calendars = filtered_calendars
+            
+            # Date range
+            start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date = start_date + timedelta(days=days)
+            
+            all_events = []
+            
+            for cal in calendars:
+                # Get calendar properties
+                props = cal.get_properties([
+                    '{DAV:}displayname',
+                    '{http://apple.com/ns/ical/}calendar-color'
+                ])
+                cal_name = props.get('{DAV:}displayname', 'Unnamed Calendar')
+                cal_color = props.get('{http://apple.com/ns/ical/}calendar-color', '#0082c9')
+                
+                # Search for events in date range
+                events = cal.search(
+                    start=start_date,
+                    end=end_date,
+                    event=True,
+                    expand=True
+                )
+                
+                for event in events:
+                    try:
+                        ical = event.icalendar_instance
+                        for component in ical.walk():
+                            if component.name == "VEVENT":
+                                # Parse event data
+                                event_data = {
+                                    'summary': str(component.get('summary', 'No Title')),
+                                    'start_date': '',
+                                    'start_time': '',
+                                    'end_date': '',
+                                    'end_time': '',
+                                    'location': str(component.get('location', '')),
+                                    'calendar_name': cal_name,
+                                    'calendar_color': cal_color
+                                }
+                                
+                                # Handle start time
+                                dtstart = component.get('dtstart')
+                                if dtstart:
+                                    start_dt = dtstart.dt
+                                    if hasattr(start_dt, 'date'):  # datetime object
+                                        event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
+                                        event_data['start_time'] = start_dt.strftime('%H:%M')
+                                    else:  # date object (all-day)
+                                        event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
+                                        event_data['start_time'] = '00:00'
+                                
+                                # Handle end time
+                                dtend = component.get('dtend')
+                                if dtend:
+                                    end_dt = dtend.dt
+                                    if hasattr(end_dt, 'date'):  # datetime object
+                                        event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
+                                        event_data['end_time'] = end_dt.strftime('%H:%M')
+                                    else:  # date object (all-day)
+                                        event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
+                                        event_data['end_time'] = '00:00'
+                                
+                                all_events.append(event_data)
+                                
+                    except Exception as e:
+                        print(f"Warning: Error parsing event: {e}", file=sys.stderr)
+                        continue
+            
+            # Sort events by start date/time
+            all_events.sort(key=lambda x: (x['start_date'], x['start_time']))
+            
+            if output == 'json':
+                print(json.dumps(all_events, indent=2))
+            elif output == 'txt':
+                for event in all_events:
+                    print(f"{event['start_date']}\t{event['start_time']}\t{event['end_date']}\t{event['end_time']}\t{event['summary']}\t{event['location']}\t{event['calendar_name']}\t{event['calendar_color']}")
+            
+            return all_events
+            
+        except Exception as e:
+            print(f"Error retrieving events: {e}", file=sys.stderr)
+            sys.exit(1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description='NextCloud Calendar CLI Tool')
+    parser.add_argument('--setup', action='store_true', help='Setup account authentication')
+    parser.add_argument('--account', default='default', help='Account ID to use')
+    parser.add_argument('--list-calendars', action='store_true', help='List available calendars')
+    parser.add_argument('--calendars', help='Comma-separated list of calendar names to include')
+    parser.add_argument('--days', type=int, default=7, help='Number of days to retrieve (default: 7)')
+    parser.add_argument('--output', choices=['json', 'txt'], default='json', help='Output format')
+    
+    args = parser.parse_args()
+    
+    nc = NextCloudCalendar()
+    
+    try:
+        if args.setup:
+            nc.setup_account(args.account)
+        elif args.list_calendars:
+            nc.list_calendars(args.account, args.output)
+        else:
+            nc.get_events(args.account, args.calendars, args.days, args.output)
+            
+    except KeyboardInterrupt:
+        print("\nOperation cancelled by user")
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
