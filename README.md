@@ -1,15 +1,31 @@
-# NextCloud Calendar Desklet
+![New Creation Computing Logo](/home/jim/Pictures/logos/ncc-logo.png)
 
-**Enhanced Cinnamon Desktop Calendar with Professional Features**
+# NextCloud Calendar Desklet v0.2.115
+
+**Alpha Release - Enhanced Cinnamon Desktop Calendar with Professional Features**
+
+## Version Control
+
+This project uses semantic versioning (0.x.yyy) for alpha/development releases. Version management is restricted to repository owners and administrators.
+
+Current version 0.2.115 indicates:
+- Pre-release alpha status (0)
+- Second feature set (2)
+- Build 115
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for:
+- Detailed version numbering scheme
+- How to contribute code
+- Development guidelines
 
 ---
 
 ## 🏢 **Developed by New Creation Computing**
 
-**Website:** https://newcreationcomputing.ca  
-**Lead Developer:** Jim Moen  
-**Email:** info@newcreationcomputing.ca  
-**GitHub:** https://github.com/siteleas/ncalendar-cinnamon-desklet  
+**Website:** http://nccomputing.ca  
+**Lead Developer:** Jim Blake  
+**Email:** support@nccomputing.ca  
+**GitHub:** https://github.com/siteleas/ncalendar-cinnamon-desklet
 
 ---
 
@@ -81,7 +97,7 @@ See [LICENSE](LICENSE) file for complete terms.
 
 ## 👏 **Credits & Acknowledgments**
 
-**Primary Development:** New Creation Computing (Jim Moen)  
+**Primary Development:** New Creation Computing (Jim Blake)
 **Original Inspiration:** Google Calendar Desklet by Gobinath  
 **Authentication Patterns:** NextCloud Talk Desktop client  
 
