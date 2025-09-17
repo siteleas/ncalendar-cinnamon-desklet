@@ -100,14 +100,22 @@ NextCloudCalendarDesklet.prototype = {
         this.settings.bind("transparency", "transparency", this.onDeskletFormatChanged, null);
         this.settings.bind("cornerradius", "cornerradius", this.onDeskletFormatChanged, null);
         
-        // Monitor and position settings
+        // Monitor and position settings  
         this.settings.bind("target_monitor", "target_monitor", this.onMonitorChanged, null);
         this.settings.bind("position_x", "position_x", this.onPositionChanged, null);
         this.settings.bind("position_y", "position_y", this.onPositionChanged, null);
         this.settings.bind("auto_position", "auto_position", this.onPositionChanged, null);
         
+        // Initialize monitor detection
+        this.availableMonitors = [];
+        
         this.setCalendarName();
-        this.detectMonitors();
+        
+        // Delay monitor detection to ensure desklet is fully initialized
+        Mainloop.timeout_add(1000, Lang.bind(this, function() {
+            this.detectMonitors();
+            return false; // Don't repeat
+        }));
 
         // Set header
         this.setHeader(_("NextCloud Calendar"));
@@ -203,6 +211,7 @@ NextCloudCalendarDesklet.prototype = {
      * Called when monitor selection changes.
      */
     onMonitorChanged() {
+        global.log("[NextCloud Calendar] Monitor changed to: " + this.target_monitor);
         this.applyMonitorSettings();
     },
 
@@ -210,6 +219,8 @@ NextCloudCalendarDesklet.prototype = {
      * Called when position settings change.
      */
     onPositionChanged() {
+        global.log("[NextCloud Calendar] Position changed - auto: " + this.auto_position + 
+                   " x: " + this.position_x + " y: " + this.position_y);
         if (this.auto_position) {
             this.applyMonitorSettings();
         } else {
@@ -626,7 +637,7 @@ with open(config_file, 'w') as f:
                 global.log("[NextCloud Calendar] Moving to monitor " + targetMonitor.index + 
                           " at position (" + newX + "," + newY + ")");
                 
-                this.actor.set_position(newX, newY);
+                this.moveToPosition(newX, newY);
             }
         } catch (e) {
             global.logError("[NextCloud Calendar] Error applying monitor settings: " + e.toString());
@@ -641,7 +652,7 @@ with open(config_file, 'w') as f:
             if (this.position_x !== undefined && this.position_y !== undefined) {
                 global.log("[NextCloud Calendar] Applying manual position (" + 
                           this.position_x + "," + this.position_y + ")");
-                this.actor.set_position(this.position_x, this.position_y);
+                this.moveToPosition(this.position_x, this.position_y);
             }
         } catch (e) {
             global.logError("[NextCloud Calendar] Error applying manual position: " + e.toString());
@@ -661,8 +672,47 @@ with open(config_file, 'w') as f:
             }
         }
         return null;
+    },
+
+    /**
+     * Move desklet to specified position using proper Cinnamon methods.
+     */
+    moveToPosition(x, y) {
+        try {
+            global.log("[NextCloud Calendar] moveToPosition called with (" + x + "," + y + ")");
+            
+            // Try multiple positioning methods for compatibility
+            if (this.actor && this.actor.set_position) {
+                this.actor.set_position(x, y);
+                global.log("[NextCloud Calendar] Used actor.set_position");
+            } else if (this.actor && this.actor.move) {
+                this.actor.move(x, y);
+                global.log("[NextCloud Calendar] Used actor.move");
+            } else if (this.actor) {
+                this.actor.x = x;
+                this.actor.y = y;
+                global.log("[NextCloud Calendar] Set actor.x and actor.y directly");
+            } else {
+                global.logError("[NextCloud Calendar] No actor available for positioning");
+            }
+            
+            // Also try to update the position in metadata if available
+            if (this.metadata && this.instanceId !== undefined) {
+                global.log("[NextCloud Calendar] Attempting to save position to desklet metadata");
+                // This might help persist the position
+                this._onPositionChanged(x, y);
+            }
+            
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error in moveToPosition: " + e.toString());
+        }
     }
 };
+
+function main(metadata, deskletID) {
+    let desklet = new NextCloudCalendarDesklet(metadata, deskletID);
+    return desklet;
+}
 
 function main(metadata, deskletID) {
     let desklet = new NextCloudCalendarDesklet(metadata, deskletID);
