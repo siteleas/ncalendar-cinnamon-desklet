@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-NextCloud Calendar CLI Tool
+NextCloud Calendar CLI Tool - Enhanced Version
 A command-line interface for NextCloud calendar access via CalDAV.
-Compatible with gcalendar command-line interface for desklet integration.
+Enhanced to extract calendar names from URLs and use direct XML parsing for properties.
 
 Copyright (C) 2025
 License: GPL-3.0-or-later
@@ -17,9 +17,14 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import requests
 import caldav
-from caldav.lib import error
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 import uuid
+import warnings
+import xml.etree.ElementTree as ET
+import re
+
+# Suppress SSL warnings for self-signed certificates
+warnings.filterwarnings('ignore', message='Unverified HTTPS request')
 
 class NextCloudCalendar:
     def __init__(self):
@@ -99,29 +104,172 @@ class NextCloudCalendar:
             password=config['app_password']
         )
 
+    def extract_calendar_name_from_url(self, url):
+        """Extract calendar name from URL path."""
+        try:
+            # Parse URL to get path
+            parsed = urlparse(str(url))
+            path_parts = parsed.path.strip('/').split('/')
+            
+            # NextCloud calendar URLs typically end with the calendar ID
+            # Format: /remote.php/dav/calendars/username/calendar-id/
+            if len(path_parts) >= 4 and 'calendars' in path_parts:
+                calendar_id = path_parts[-1] if path_parts[-1] else path_parts[-2]
+                
+                # Clean up the calendar ID to make it more readable
+                # Convert dashes/underscores to spaces and title case
+                name = calendar_id.replace('-', ' ').replace('_', ' ')
+                name = re.sub(r'\s+', ' ', name)  # Remove extra spaces
+                name = name.strip()
+                
+                # Handle special cases
+                if name.startswith('app-generated'):
+                    # app-generated--deck--board-1 -> "Deck Board 1"
+                    parts = name.split('--')[1:]  # Skip 'app-generated'
+                    if parts:
+                        name = ' '.join(parts).replace('-', ' ').title()
+                    else:
+                        name = "Generated Calendar"
+                else:
+                    name = name.title()
+                
+                return name if name else calendar_id
+            
+            return f"Calendar ({path_parts[-1] if path_parts else 'Unknown'})"
+            
+        except Exception as e:
+            print(f"Debug: Error extracting name from URL {url}: {e}", file=sys.stderr)
+            return "Unnamed Calendar"
+
+    def direct_propfind_request(self, calendar_url, username, password):
+        """Make a direct PROPFIND request to get calendar properties."""
+        try:
+            # PROPFIND request body to get calendar properties
+            propfind_body = '''<?xml version="1.0" encoding="UTF-8"?>
+<d:propfind xmlns:d="DAV:" xmlns:cs="http://calendarserver.org/ns/" xmlns:c="urn:ietf:params:xml:ns:caldav" xmlns:ic="http://apple.com/ns/ical/">
+    <d:prop>
+        <d:displayname />
+        <ic:calendar-color />
+        <c:calendar-description />
+        <d:resourcetype />
+    </d:prop>
+</d:propfind>'''
+            
+            headers = {
+                'Content-Type': 'text/xml; charset=utf-8',
+                'Depth': '0'
+            }
+            
+            response = requests.request(
+                'PROPFIND',
+                calendar_url,
+                data=propfind_body,
+                headers=headers,
+                auth=(username, password),
+                verify=False  # For self-signed certificates
+            )
+            
+            if response.status_code == 207:  # Multi-Status
+                # Parse XML response
+                root = ET.fromstring(response.content)
+                
+                # Define namespaces
+                namespaces = {
+                    'd': 'DAV:',
+                    'ic': 'http://apple.com/ns/ical/',
+                    'c': 'urn:ietf:params:xml:ns:caldav'
+                }
+                
+                # Extract properties
+                displayname_elem = root.find('.//d:displayname', namespaces)
+                color_elem = root.find('.//ic:calendar-color', namespaces)
+                desc_elem = root.find('.//c:calendar-description', namespaces)
+                
+                return {
+                    'name': displayname_elem.text if displayname_elem is not None and displayname_elem.text else None,
+                    'color': color_elem.text if color_elem is not None and color_elem.text else None,
+                    'description': desc_elem.text if desc_elem is not None and desc_elem.text else None
+                }
+            
+        except Exception as e:
+            print(f"Debug: Direct PROPFIND failed for {calendar_url}: {e}", file=sys.stderr)
+            
+        return None
+
+    def get_calendar_properties_enhanced(self, calendar, username, password):
+        """Get calendar properties using multiple methods."""
+        calendar_url = str(calendar.url)
+        
+        # Method 1: Try direct PROPFIND request
+        props = self.direct_propfind_request(calendar_url, username, password)
+        if props and props.get('name'):
+            return props
+        
+        # Method 2: Try to extract name from URL
+        url_name = self.extract_calendar_name_from_url(calendar_url)
+        
+        # Method 3: Try the original CalDAV method (might still fail)
+        try:
+            caldav_props = calendar.get_properties([
+                '{DAV:}displayname',
+                '{http://apple.com/ns/ical/}calendar-color',
+                '{urn:ietf:params:xml:ns:caldav}calendar-description'
+            ])
+            
+            if isinstance(caldav_props, dict):
+                caldav_name = caldav_props.get('{DAV:}displayname')
+                if caldav_name:
+                    return {
+                        'name': caldav_name,
+                        'color': caldav_props.get('{http://apple.com/ns/ical/}calendar-color', '#0082c9'),
+                        'description': caldav_props.get('{urn:ietf:params:xml:ns:caldav}calendar-description', '')
+                    }
+        except Exception as e:
+            print(f"Debug: CalDAV properties method failed: {e}", file=sys.stderr)
+        
+        # Fallback: Use URL-extracted name
+        return {
+            'name': url_name,
+            'color': '#0082c9',  # Default NextCloud blue
+            'description': f'Calendar extracted from URL: {calendar_url}'
+        }
+
     def list_calendars(self, account_id='default', output='json'):
-        """List available calendars."""
+        """List available calendars with enhanced property extraction."""
         try:
             client = self.get_caldav_client(account_id)
+            config = self.get_account_config(account_id)
             principal = client.principal()
             calendars = principal.calendars()
             
             calendar_list = []
-            for cal in calendars:
-                # Get calendar properties
-                props = cal.get_properties([
-                    '{DAV:}displayname',
-                    '{http://apple.com/ns/ical/}calendar-color',
-                    '{urn:ietf:params:xml:ns:caldav}calendar-description'
-                ])
-                
-                cal_info = {
-                    'name': props.get('{DAV:}displayname', 'Unnamed Calendar'),
-                    'url': str(cal.url),
-                    'color': props.get('{http://apple.com/ns/ical/}calendar-color', '#0082c9'),
-                    'description': props.get('{urn:ietf:params:xml:ns:caldav}calendar-description', '')
-                }
-                calendar_list.append(cal_info)
+            for i, cal in enumerate(calendars, 1):
+                try:
+                    # Get enhanced properties
+                    props = self.get_calendar_properties_enhanced(
+                        cal, 
+                        config['username'], 
+                        config['app_password']
+                    )
+                    
+                    cal_info = {
+                        'name': props['name'] or f'Calendar {i}',
+                        'url': str(cal.url),
+                        'color': props['color'] or '#0082c9',
+                        'description': props['description'] or ''
+                    }
+                    calendar_list.append(cal_info)
+                    
+                except Exception as e:
+                    print(f"Warning: Error processing calendar {i}: {e}", file=sys.stderr)
+                    # Final fallback
+                    cal_info = {
+                        'name': f'Calendar {i}',
+                        'url': str(cal.url),
+                        'color': '#0082c9',
+                        'description': ''
+                    }
+                    calendar_list.append(cal_info)
             
             if output == 'json':
                 print(json.dumps(calendar_list, indent=2))
@@ -135,10 +283,21 @@ class NextCloudCalendar:
             print(f"Error listing calendars: {e}", file=sys.stderr)
             sys.exit(1)
 
+    def safe_get_component_property(self, component, prop_name, default=''):
+        """Safely get component property."""
+        try:
+            prop = component.get(prop_name)
+            if prop is None:
+                return default
+            return str(prop)
+        except:
+            return default
+
     def get_events(self, account_id='default', calendar_names=None, days=7, output='json'):
-        """Get events from calendars."""
+        """Get events from calendars with enhanced calendar property handling."""
         try:
             client = self.get_caldav_client(account_id)
+            config = self.get_account_config(account_id)
             principal = client.principal()
             calendars = principal.calendars()
             
@@ -147,11 +306,33 @@ class NextCloudCalendar:
                 cal_names_set = set(calendar_names.split(','))
                 filtered_calendars = []
                 for cal in calendars:
-                    props = cal.get_properties(['{DAV:}displayname'])
-                    cal_name = props.get('{DAV:}displayname', 'Unnamed Calendar')
-                    if cal_name in cal_names_set:
-                        filtered_calendars.append(cal)
+                    try:
+                        props = self.get_calendar_properties_enhanced(
+                            cal, 
+                            config['username'], 
+                            config['app_password']
+                        )
+                        cal_name = props['name']
+                        if cal_name in cal_names_set:
+                            filtered_calendars.append((cal, props))
+                    except:
+                        continue
                 calendars = filtered_calendars
+            else:
+                # Add properties to all calendars
+                enhanced_calendars = []
+                for cal in calendars:
+                    try:
+                        props = self.get_calendar_properties_enhanced(
+                            cal, 
+                            config['username'], 
+                            config['app_password']
+                        )
+                        enhanced_calendars.append((cal, props))
+                    except Exception as e:
+                        print(f"Warning: Error processing calendar: {e}", file=sys.stderr)
+                        continue
+                calendars = enhanced_calendars
             
             # Date range
             start_date = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -159,67 +340,89 @@ class NextCloudCalendar:
             
             all_events = []
             
-            for cal in calendars:
-                # Get calendar properties
-                props = cal.get_properties([
-                    '{DAV:}displayname',
-                    '{http://apple.com/ns/ical/}calendar-color'
-                ])
-                cal_name = props.get('{DAV:}displayname', 'Unnamed Calendar')
-                cal_color = props.get('{http://apple.com/ns/ical/}calendar-color', '#0082c9')
+            for cal_info in calendars:
+                if isinstance(cal_info, tuple):
+                    cal, props = cal_info
+                    cal_name = props['name']
+                    cal_color = props['color']
+                else:
+                    cal = cal_info
+                    cal_name = 'Unknown Calendar'
+                    cal_color = '#0082c9'
                 
-                # Search for events in date range
-                events = cal.search(
-                    start=start_date,
-                    end=end_date,
-                    event=True,
-                    expand=True
-                )
-                
-                for event in events:
-                    try:
-                        ical = event.icalendar_instance
-                        for component in ical.walk():
-                            if component.name == "VEVENT":
-                                # Parse event data
-                                event_data = {
-                                    'summary': str(component.get('summary', 'No Title')),
-                                    'start_date': '',
-                                    'start_time': '',
-                                    'end_date': '',
-                                    'end_time': '',
-                                    'location': str(component.get('location', '')),
-                                    'calendar_name': cal_name,
-                                    'calendar_color': cal_color
-                                }
-                                
-                                # Handle start time
-                                dtstart = component.get('dtstart')
-                                if dtstart:
-                                    start_dt = dtstart.dt
-                                    if hasattr(start_dt, 'date'):  # datetime object
-                                        event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
-                                        event_data['start_time'] = start_dt.strftime('%H:%M')
-                                    else:  # date object (all-day)
-                                        event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
-                                        event_data['start_time'] = '00:00'
-                                
-                                # Handle end time
-                                dtend = component.get('dtend')
-                                if dtend:
-                                    end_dt = dtend.dt
-                                    if hasattr(end_dt, 'date'):  # datetime object
-                                        event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
-                                        event_data['end_time'] = end_dt.strftime('%H:%M')
-                                    else:  # date object (all-day)
-                                        event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
-                                        event_data['end_time'] = '00:00'
-                                
-                                all_events.append(event_data)
-                                
-                    except Exception as e:
-                        print(f"Warning: Error parsing event: {e}", file=sys.stderr)
-                        continue
+                try:
+                    # Search for events in date range
+                    events = cal.search(
+                        start=start_date,
+                        end=end_date,
+                        event=True,
+                        expand=True
+                    )
+                    
+                    for event in events:
+                        try:
+                            # Get iCalendar data - compatible approach
+                            try:
+                                ical = event.icalendar_instance
+                            except:
+                                try:
+                                    ical = event.instance
+                                except:
+                                    continue
+                            
+                            for component in ical.walk():
+                                if component.name == "VEVENT":
+                                    # Parse event data
+                                    event_data = {
+                                        'summary': self.safe_get_component_property(component, 'summary', 'No Title'),
+                                        'start_date': '',
+                                        'start_time': '',
+                                        'end_date': '',
+                                        'end_time': '',
+                                        'location': self.safe_get_component_property(component, 'location', ''),
+                                        'calendar_name': cal_name,
+                                        'calendar_color': cal_color
+                                    }
+                                    
+                                    # Handle start time
+                                    try:
+                                        dtstart = component.get('dtstart')
+                                        if dtstart:
+                                            start_dt = dtstart.dt
+                                            if hasattr(start_dt, 'strftime'):
+                                                if hasattr(start_dt, 'hour'):  # datetime object
+                                                    event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
+                                                    event_data['start_time'] = start_dt.strftime('%H:%M')
+                                                else:  # date object (all-day)
+                                                    event_data['start_date'] = start_dt.strftime('%Y-%m-%d')
+                                                    event_data['start_time'] = '00:00'
+                                    except Exception as e:
+                                        print(f"Warning: Error parsing start time: {e}", file=sys.stderr)
+                                    
+                                    # Handle end time
+                                    try:
+                                        dtend = component.get('dtend')
+                                        if dtend:
+                                            end_dt = dtend.dt
+                                            if hasattr(end_dt, 'strftime'):
+                                                if hasattr(end_dt, 'hour'):  # datetime object
+                                                    event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
+                                                    event_data['end_time'] = end_dt.strftime('%H:%M')
+                                                else:  # date object (all-day)
+                                                    event_data['end_date'] = end_dt.strftime('%Y-%m-%d')
+                                                    event_data['end_time'] = '00:00'
+                                    except Exception as e:
+                                        print(f"Warning: Error parsing end time: {e}", file=sys.stderr)
+                                    
+                                    all_events.append(event_data)
+                                    
+                        except Exception as e:
+                            print(f"Warning: Error parsing event: {e}", file=sys.stderr)
+                            continue
+                            
+                except Exception as e:
+                    print(f"Warning: Error processing calendar {cal_name}: {e}", file=sys.stderr)
+                    continue
             
             # Sort events by start date/time
             all_events.sort(key=lambda x: (x['start_date'], x['start_time']))
@@ -238,15 +441,20 @@ class NextCloudCalendar:
 
 
 def main():
-    parser = argparse.ArgumentParser(description='NextCloud Calendar CLI Tool')
+    parser = argparse.ArgumentParser(description='NextCloud Calendar CLI Tool - Enhanced Version')
     parser.add_argument('--setup', action='store_true', help='Setup account authentication')
     parser.add_argument('--account', default='default', help='Account ID to use')
     parser.add_argument('--list-calendars', action='store_true', help='List available calendars')
     parser.add_argument('--calendars', help='Comma-separated list of calendar names to include')
     parser.add_argument('--days', type=int, default=7, help='Number of days to retrieve (default: 7)')
+    parser.add_argument('--agenda', type=int, help='Alias for --days (for compatibility)')
     parser.add_argument('--output', choices=['json', 'txt'], default='json', help='Output format')
     
     args = parser.parse_args()
+    
+    # Handle --agenda alias
+    if args.agenda:
+        args.days = args.agenda
     
     nc = NextCloudCalendar()
     

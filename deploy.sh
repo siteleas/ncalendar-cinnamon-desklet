@@ -76,8 +76,51 @@ full_deploy() {
     echo -e "${CYAN}[COPY]${NC} Copying desklet files..."
     cp -r "$SOURCE_DIR" ~/.local/share/cinnamon/desklets/
     
-    echo -e "${GREEN}[SUCCESS]${NC} Desklet deployed successfully!"
+    # Clear Cinnamon caches to ensure new code is loaded
+    echo -e "${BLUE}[CACHE]${NC} Clearing Cinnamon JavaScript cache..."
+    rm -rf ~/.cache/cinnamon/ ~/.cache/gjs-* 2>/dev/null || true
+    
+    # Check if Cinnamon is running and reload if necessary
+    if pgrep -x "cinnamon" >/dev/null; then
+        echo -e "${PURPLE}[RELOAD]${NC} Reloading Cinnamon to apply changes..."
+        echo -e "${YELLOW}[INFO]${NC} Your desktop will refresh momentarily..."
+        
+        # Give user a moment to read the message
+        sleep 1
+        
+        # Restart Cinnamon in the background
+        nohup cinnamon --replace >/dev/null 2>&1 & disown
+        
+        # Wait a moment for Cinnamon to start
+        sleep 3
+        
+        echo -e "${GREEN}[RELOAD]${NC} Cinnamon reloaded successfully!"
+    else
+        echo -e "${YELLOW}[INFO]${NC} Cinnamon not detected - changes will apply on next login"
+    fi
+    
+    echo -e "${GREEN}[SUCCESS]${NC} Desklet deployed with cache clearing!"
     echo "          Add it to your desktop through: Right-click → Add desklets to the desktop"
+}
+
+# Enhanced full deploy with development mode
+full_deploy_dev() {
+    echo -e "${PURPLE}[DEV MODE]${NC} Enhanced deployment with aggressive cache clearing..."
+    
+    # Kill any existing Cinnamon processes first
+    echo -e "${YELLOW}[DEV]${NC} Stopping Cinnamon processes..."
+    pkill -f cinnamon 2>/dev/null || true
+    sleep 2
+    
+    # Aggressive cache clearing
+    echo -e "${BLUE}[DEV]${NC} Aggressive cache clearing..."
+    rm -rf ~/.cache/cinnamon/ ~/.cache/gjs-* ~/.cache/gnome-shell/ 2>/dev/null || true
+    rm -rf ~/.local/share/cinnamon/extensions/cache/ 2>/dev/null || true
+    
+    # Run normal deployment
+    full_deploy
+    
+    echo -e "${PURPLE}[DEV]${NC} Development deployment complete!"
 }
 
 # Parse command line arguments
@@ -85,11 +128,15 @@ case "$1" in
     --update-icon)
         update_icons
         ;;
+    --dev)
+        full_deploy_dev
+        ;;
     --help|-h)
         echo "NextCloud Calendar Desklet Deployment Script"
         echo ""
         echo "Usage:"
         echo "  ./deploy.sh                Deploy or redeploy the complete desklet"
+        echo "  ./deploy.sh --dev          Deploy with development mode (aggressive cache clearing)"
         echo "  ./deploy.sh --update-icon  Update only icon files and refresh caches"
         echo "  ./deploy.sh --help         Show this help message"
         echo ""

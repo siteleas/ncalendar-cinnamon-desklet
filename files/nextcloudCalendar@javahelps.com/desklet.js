@@ -20,6 +20,7 @@
 "use strict";
 
 const Cinnamon = imports.gi.Cinnamon;
+const Clutter = imports.gi.Clutter;
 const Desklet = imports.ui.desklet;
 const GLib = imports.gi.GLib;
 const Lang = imports.lang;
@@ -31,6 +32,7 @@ const Gio = imports.gi.Gio;
 const Gtk = imports.gi.Gtk;
 const St = imports.gi.St;
 const PopupMenu = imports.ui.popupMenu;
+const ModalDialog = imports.ui.modalDialog;
 
 // Import local libraries
 imports.searchPath.unshift(GLib.get_home_dir() + "/.local/share/cinnamon/desklets/nextcloudCalendar@javahelps.com/lib");
@@ -100,20 +102,21 @@ NextCloudCalendarDesklet.prototype = {
         this.settings.bind("transparency", "transparency", this.onDeskletFormatChanged, null);
         this.settings.bind("cornerradius", "cornerradius", this.onDeskletFormatChanged, null);
         
-        // Monitor and position settings  
-        this.settings.bind("target_monitor", "target_monitor", this.onMonitorChanged, null);
-        this.settings.bind("position_x", "position_x", this.onPositionChanged, null);
-        this.settings.bind("position_y", "position_y", this.onPositionChanged, null);
-        this.settings.bind("auto_position", "auto_position", this.onPositionChanged, null);
+        // Monitor and position settings - use same pattern as style settings for live updates
+        this.settings.bind("target_monitor", "target_monitor", this.onDisplaySettingsChanged, null);
+        this.settings.bind("position_x", "position_x", this.onDisplaySettingsChanged, null);
+        this.settings.bind("position_y", "position_y", this.onDisplaySettingsChanged, null);
+        this.settings.bind("auto_position", "auto_position", this.onDisplaySettingsChanged, null);
         
         // Initialize monitor detection
         this.availableMonitors = [];
         
         this.setCalendarName();
         
-        // Delay monitor detection to ensure desklet is fully initialized
+        // Delay monitor detection and positioning to ensure desklet is fully initialized
         Mainloop.timeout_add(1000, Lang.bind(this, function() {
             this.detectMonitors();
+            this.applyInitialPosition();
             return false; // Don't repeat
         }));
 
@@ -128,6 +131,14 @@ NextCloudCalendarDesklet.prototype = {
             }
         });
         this._menu.addMenuItem(openNextCloudCalendarItem);
+        
+        // Add separator and refresh item
+        this._menu.addMenuItem(new PopupMenu.PopupSeparatorMenuItem());
+        let refreshEventsItem = new PopupMenu.PopupIconMenuItem(_("Refresh Events"), "view-refresh", St.IconType.SYMBOLIC);
+        refreshEventsItem.connect("activate", Lang.bind(this, function() {
+            this.retrieveEventsIfAuthorized();
+        }));
+        this._menu.addMenuItem(refreshEventsItem);
         
         // Set up ncalendar configuration when credentials are available
         this.setupNCaendarIfNeeded();
@@ -202,30 +213,263 @@ NextCloudCalendarDesklet.prototype = {
 
     /**
      * Called when user clicks on the desklet.
+     * Changed behavior: Don't refresh events on desklet click to avoid clearing content.
      */
     on_desklet_clicked(event) {
-        this.retrieveEventsIfAuthorized();
-    },
-
-    /**
-     * Called when monitor selection changes.
-     */
-    onMonitorChanged() {
-        global.log("[NextCloud Calendar] Monitor changed to: " + this.target_monitor);
-        this.applyMonitorSettings();
-    },
-
-    /**
-     * Called when position settings change.
-     */
-    onPositionChanged() {
-        global.log("[NextCloud Calendar] Position changed - auto: " + this.auto_position + 
-                   " x: " + this.position_x + " y: " + this.position_y);
-        if (this.auto_position) {
-            this.applyMonitorSettings();
-        } else {
-            this.applyManualPosition();
+        // Only refresh if there are no events visible, or if it's been more than update interval
+        if (this.eventsList.length === 0) {
+            this.retrieveEventsIfAuthorized();
         }
+        // For manual refresh, users can use the right-click menu
+    },
+
+    /**
+     * Show a simple event details dialog.
+     */
+    showEventDetailsDialog(eventData) {
+        try {
+            global.log("[NextCloud Calendar] Showing event details for: " + eventData.name);
+            
+            // Build event details text
+            let details = "Event: " + eventData.name;
+            details += "\nDate: " + eventData.startDateText;
+            if (eventData.location) {
+                details += "\nLocation: " + eventData.location;
+            }
+            if (eventData.calendar_name) {
+                details += "\nCalendar: " + eventData.calendar_name;
+            }
+            
+            // Show desktop notification with event details
+            let cmd = 'notify-send "NextCloud Calendar Event" "' + details.replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+            GLib.spawn_command_line_async(cmd);
+            
+            // Also try to open in browser if server URL is configured
+            if (this.serverUrl && this.serverUrl !== "") {
+                let baseUrl = this.serverUrl.replace(/\/$/, '');
+                let calendarUrl = baseUrl + "/apps/calendar";
+                
+                // Try to open to the specific date if available
+                if (eventData.startDateText) {
+                    let dateStr = eventData.startDateText.replace(/-/g, '/');
+                    calendarUrl = baseUrl + "/apps/calendar/dayGridMonth/" + dateStr;
+                }
+                
+                global.log("[NextCloud Calendar] Opening URL: " + calendarUrl);
+                GLib.spawn_command_line_async("xdg-open " + calendarUrl);
+            }
+            
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error showing event details: " + e.toString());
+            GLib.spawn_command_line_async('notify-send "NextCloud Calendar" "Error showing event details"');
+        }
+    },
+
+    /**
+     * Show event details in a modal dialog.
+     */
+    showEventDetailsModal(event) {
+        try {
+            let dialog = new ModalDialog.ModalDialog();
+            
+            // Set dialog properties
+            dialog.contentLayout.style_class = 'calendar-event-dialog';
+            dialog.contentLayout.style = 'padding: 20px; min-width: 400px; background-color: rgba(0,0,0,0.9); border-radius: 10px;';
+            
+            // Title
+            let titleLabel = new St.Label({
+                text: event.name || 'Event Details',
+                style_class: 'calendar-event-title',
+                style: 'font-size: 18pt; font-weight: bold; color: white; margin-bottom: 15px;'
+            });
+            dialog.contentLayout.add(titleLabel);
+            
+            // Event details container
+            let detailsBox = new St.BoxLayout({
+                vertical: true,
+                style: 'spacing: 8px;'
+            });
+            
+            // Add event details
+            this.addEventDetail(detailsBox, '📅 Date:', this.formatEventDateRange(event));
+            
+            if (event.startTime !== '00:00' || event.endTime !== '00:00') {
+                let timeText = this.formatEventTimeRange(event);
+                if (timeText) {
+                    this.addEventDetail(detailsBox, '🕐 Time:', timeText);
+                }
+            } else {
+                this.addEventDetail(detailsBox, '📅 Type:', 'All Day Event');
+            }
+            
+            if (event.location && event.location !== '') {
+                this.addEventDetail(detailsBox, '📍 Location:', event.location);
+            }
+            
+            // Add calendar info if available
+            if (event.calendar_name) {
+                let calendarText = event.calendar_name;
+                if (event.color) {
+                    calendarText = '● ' + calendarText;
+                }
+                this.addEventDetail(detailsBox, '📚 Calendar:', calendarText, event.color);
+            }
+            
+            dialog.contentLayout.add(detailsBox);
+            
+            // Action buttons
+            let buttonBox = new St.BoxLayout({
+                style: 'spacing: 10px; margin-top: 20px;'
+            });
+            
+            // Open in NextCloud button
+            if (this.serverUrl && this.serverUrl !== '') {
+                let openButton = new St.Button({
+                    label: 'Open in NextCloud',
+                    style_class: 'calendar-button',
+                    style: 'padding: 8px 16px; background-color: #0082c9; color: white; border-radius: 5px;'
+                });
+                openButton.connect('clicked', Lang.bind(this, function() {
+                    let baseUrl = this.serverUrl.replace(/\/$/, '');
+                    let calendarUrl = baseUrl + "/apps/calendar";
+                    if (event.startDate) {
+                        let eventDate = event.startDate.toString('yyyy/MM/dd');
+                        calendarUrl = baseUrl + "/apps/calendar/dayGridMonth/" + eventDate;
+                    }
+                    GLib.spawn_command_line_async("xdg-open " + calendarUrl);
+                    dialog.close();
+                }));
+                buttonBox.add(openButton);
+            }
+            
+            // Close button
+            let closeButton = new St.Button({
+                label: 'Close',
+                style_class: 'calendar-button',
+                style: 'padding: 8px 16px; background-color: #666666; color: white; border-radius: 5px; margin-left: 10px;'
+            });
+            closeButton.connect('clicked', Lang.bind(this, function() {
+                dialog.close();
+            }));
+            buttonBox.add(closeButton);
+            
+            dialog.contentLayout.add(buttonBox);
+            
+            // Show the dialog
+            dialog.open();
+            
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error creating event details modal: " + e.toString());
+        }
+    },
+
+    /**
+     * Add a detail row to the event details box.
+     */
+    addEventDetail(container, label, value, color = null) {
+        let rowBox = new St.BoxLayout({
+            style: 'spacing: 10px; margin-bottom: 5px;'
+        });
+        
+        let labelWidget = new St.Label({
+            text: label,
+            style: 'color: #cccccc; font-weight: bold; min-width: 80px;'
+        });
+        
+        let valueStyle = 'color: white;';
+        if (color) {
+            valueStyle += ' color: ' + color + ';';
+        }
+        
+        let valueWidget = new St.Label({
+            text: value,
+            style: valueStyle
+        });
+        
+        rowBox.add(labelWidget);
+        rowBox.add(valueWidget);
+        container.add(rowBox);
+    },
+
+    /**
+     * Format event date range for display.
+     */
+    formatEventDateRange(event) {
+        try {
+            let startDate = event.startDate || new XDate(event.start_date);
+            let endDate = event.endDate || new XDate(event.end_date);
+            
+            let startDateStr = startDate.toString('MMMM dd, yyyy');
+            
+            // Check if it spans multiple days
+            if (startDate.diffDays(endDate) < -1) {
+                let endDateStr = endDate.toString('MMMM dd, yyyy');
+                return startDateStr + ' - ' + endDateStr;
+            } else {
+                return startDateStr;
+            }
+        } catch (e) {
+            return event.start_date || 'Unknown date';
+        }
+    },
+
+    /**
+     * Format event time range for display.
+     */
+    formatEventTimeRange(event) {
+        try {
+            if (event.startTime === '00:00' && event.endTime === '00:00') {
+                return null; // All day event
+            }
+            
+            let startTime = this.formatTime(event.startTime);
+            let endTime = this.formatTime(event.endTime);
+            
+            if (startTime === endTime) {
+                return startTime;
+            } else {
+                return startTime + ' - ' + endTime;
+            }
+        } catch (e) {
+            return event.startTime + ' - ' + event.endTime;
+        }
+    },
+
+    /**
+     * Format time based on user preference (12h/24h).
+     */
+    formatTime(timeStr) {
+        try {
+            if (this.use_24h_clock) {
+                return timeStr;
+            }
+            
+            let time = timeStr.toString().match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+            if (time) {
+                let hours = parseInt(time[1]);
+                let minutes = time[2];
+                let ampm = hours < 12 ? 'AM' : 'PM';
+                if (hours === 0) hours = 12;
+                if (hours > 12) hours -= 12;
+                return hours + ':' + minutes + ' ' + ampm;
+            }
+            return timeStr;
+        } catch (e) {
+            return timeStr;
+        }
+    },
+
+    /**
+     * Called when display/monitor settings change - follows same pattern as style settings.
+     */
+    onDisplaySettingsChanged() {
+        global.log("[NextCloud Calendar] Display settings changed - target_monitor: " + this.target_monitor + 
+                   ", auto_position: " + this.auto_position + 
+                   ", position_x: " + this.position_x + 
+                   ", position_y: " + this.position_y);
+        
+        // Apply positioning immediately using the same pattern as format changes
+        this.applyPositionAndRefresh();
     },
 
     /**
@@ -373,10 +617,16 @@ with open(config_file, 'w') as f:
             });
             box.add(lblDate);
             lblEvent.width = textWidth - lblDate.width - 50 * this.zoom * global.ui_scale;
+            
+            // Make event clickable
+            this.makeEventClickable(box, event);
         } else {
             let lblEvent = CalendarUtility.label(event.name, this.zoom, this.alldaytextcolor);
             lblEvent.width = textWidth;
             box.add(lblEvent);
+            
+            // Make event clickable
+            this.makeEventClickable(box, event);
         }
 
         if (this.show_location && event.location !== "") {
@@ -394,6 +644,42 @@ with open(config_file, 'w') as f:
         }
     },
 
+    /**
+     * Make event clickable by adding a button to the event row.
+     */
+    makeEventClickable(eventBox, eventData) {
+        try {
+            // Add a small clickable button/icon next to the event
+            let clickButton = new St.Button({
+                label: '🔗',  // Link icon
+                style_class: 'event-click-button',
+                style: 'padding: 2px; margin-left: 5px; font-size: 10pt;'
+            });
+            
+            clickButton.connect('clicked', Lang.bind(this, function() {
+                global.log("[NextCloud Calendar] Event button clicked: " + eventData.name);
+                this.showEventDetailsDialog(eventData);
+            }));
+            
+            // Add the button to the event box
+            eventBox.add(clickButton);
+            
+            global.log("[NextCloud Calendar] Added click button for: " + eventData.name);
+            
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error making event clickable: " + e.toString());
+        }
+    },
+
+    /**
+     * Show loading indicator.
+     */
+    showLoadingIndicator() {
+        this.resetWidget(true);
+        let loadingLabel = CalendarUtility.label("🔄 Loading events...", this.zoom, this.textcolor);
+        this.window.add(loadingLabel);
+    },
+    
     /**
      * Reset internal states and widget CalendarUtility.
      */
@@ -450,6 +736,9 @@ with open(config_file, 'w') as f:
 
     retrieveEventsIfAuthorized() {
         let accountId = this.ncalendarAccount || "default";
+        
+        // Show loading indicator first
+        this.showLoadingIndicator();
         
         // Check if we have credentials configured
         if (!this.serverUrl || !this.username || !this.appPassword ||
@@ -558,6 +847,61 @@ with open(config_file, 'w') as f:
         }
     },
 
+    //////////////////////////////////////////// Position Management Functions ////////////////////////////////////////////
+    /**
+     * Apply position changes immediately like style changes - called when display settings change.
+     */
+    applyPositionAndRefresh() {
+        global.log("[NextCloud Calendar] applyPositionAndRefresh called");
+        
+        // Ensure monitors are detected
+        if (!this.availableMonitors || this.availableMonitors.length === 0) {
+            this.detectMonitors();
+        }
+        
+        // Use a small delay to allow the settings to fully update
+        Mainloop.timeout_add(100, Lang.bind(this, function() {
+            try {
+                this.performImmediatePositioning();
+            } catch (e) {
+                global.logError("[NextCloud Calendar] Error in applyPositionAndRefresh: " + e.toString());
+            }
+            return false; // Don't repeat
+        }));
+    },
+    
+    /**
+     * Apply initial position settings on desklet startup.
+     */
+    applyInitialPosition() {
+        global.log("[NextCloud Calendar] applyInitialPosition called");
+        global.log("[NextCloud Calendar] Settings - target_monitor: " + this.target_monitor + 
+                   ", auto_position: " + this.auto_position + 
+                   ", position_x: " + this.position_x + 
+                   ", position_y: " + this.position_y);
+        
+        // Give the desklet a moment to fully render before positioning
+        Mainloop.timeout_add(500, Lang.bind(this, function() {
+            try {
+                this.performImmediatePositioning();
+            } catch (e) {
+                global.logError("[NextCloud Calendar] Error in applyInitialPosition: " + e.toString());
+            }
+            return false; // Don't repeat
+        }));
+    },
+    
+    /**
+     * Perform immediate positioning - the core positioning logic.
+     */
+    performImmediatePositioning() {
+        if (this.auto_position) {
+            this.applyMonitorSettings();
+        } else {
+            this.applyManualPosition();
+        }
+    },
+    
     //////////////////////////////////////////// Monitor Management Functions ////////////////////////////////////////////
     /**
      * Detect available monitors and their configurations.
@@ -588,6 +932,17 @@ with open(config_file, 'w') as f:
                               " at (" + geometry.x + "," + geometry.y + ")" +
                               (isPrimary ? " [PRIMARY]" : ""));
                 }
+                
+                // Log current desklet position for reference
+                if (this.actor) {
+                    let currentX = this.actor.get_x();
+                    let currentY = this.actor.get_y();
+                    let currentMonitor = this.getMonitorAtPosition(currentX, currentY);
+                    global.log("[NextCloud Calendar] Current desklet position: (" + currentX + "," + currentY + ")" +
+                              (currentMonitor ? " on monitor " + currentMonitor.index : " (no monitor match)"));
+                }
+            } else {
+                global.logError("[NextCloud Calendar] Display or monitor detection not available");
             }
         } catch (e) {
             global.logError("[NextCloud Calendar] Error detecting monitors: " + e.toString());
@@ -598,8 +953,16 @@ with open(config_file, 'w') as f:
      * Apply monitor settings based on target_monitor selection.
      */
     applyMonitorSettings() {
+        global.log("[NextCloud Calendar] applyMonitorSettings called with target_monitor: " + this.target_monitor);
+        
         if (!this.availableMonitors || this.availableMonitors.length === 0) {
+            global.log("[NextCloud Calendar] No monitors cached, detecting...");
             this.detectMonitors();
+        }
+        
+        if (!this.availableMonitors || this.availableMonitors.length === 0) {
+            global.logError("[NextCloud Calendar] No monitors available for positioning");
+            return;
         }
         
         let targetMonitor = null;
@@ -608,36 +971,59 @@ with open(config_file, 'w') as f:
             switch (this.target_monitor) {
                 case "primary":
                     targetMonitor = this.availableMonitors.find(m => m.primary);
+                    global.log("[NextCloud Calendar] Looking for primary monitor: " + (targetMonitor ? "found index " + targetMonitor.index : "not found"));
                     break;
                 case "monitor0":
                     targetMonitor = this.availableMonitors[0];
+                    global.log("[NextCloud Calendar] Selecting monitor 0: " + (targetMonitor ? "found" : "not available"));
                     break;
                 case "monitor1":
                     targetMonitor = this.availableMonitors[1];
+                    global.log("[NextCloud Calendar] Selecting monitor 1: " + (targetMonitor ? "found" : "not available"));
                     break;
                 case "monitor2":
                     targetMonitor = this.availableMonitors[2];
+                    global.log("[NextCloud Calendar] Selecting monitor 2: " + (targetMonitor ? "found" : "not available"));
                     break;
                 case "auto":
                 default:
                     // Use current monitor or primary as fallback
-                    let currentX = this.actor.get_x();
-                    let currentY = this.actor.get_y();
-                    targetMonitor = this.getMonitorAtPosition(currentX, currentY) || 
-                                  this.availableMonitors.find(m => m.primary) ||
-                                  this.availableMonitors[0];
+                    if (this.actor) {
+                        let currentX = this.actor.get_x();
+                        let currentY = this.actor.get_y();
+                        targetMonitor = this.getMonitorAtPosition(currentX, currentY) || 
+                                      this.availableMonitors.find(m => m.primary) ||
+                                      this.availableMonitors[0];
+                        global.log("[NextCloud Calendar] Auto-select mode: using " + 
+                                  (targetMonitor ? "monitor " + targetMonitor.index : "no monitor found"));
+                    } else {
+                        targetMonitor = this.availableMonitors.find(m => m.primary) || this.availableMonitors[0];
+                        global.log("[NextCloud Calendar] Auto-select mode (no actor): using " + 
+                                  (targetMonitor ? "monitor " + targetMonitor.index : "no monitor found"));
+                    }
                     break;
             }
             
-            if (targetMonitor && this.auto_position) {
-                // Position desklet at a reasonable default location on the target monitor
-                let newX = targetMonitor.x + 50;  // 50px from left edge
-                let newY = targetMonitor.y + 50;  // 50px from top edge
+            if (targetMonitor) {
+                global.log("[NextCloud Calendar] Target monitor found: " + targetMonitor.index + 
+                          " (" + targetMonitor.width + "x" + targetMonitor.height + 
+                          " at " + targetMonitor.x + "," + targetMonitor.y + ")");
                 
-                global.log("[NextCloud Calendar] Moving to monitor " + targetMonitor.index + 
-                          " at position (" + newX + "," + newY + ")");
-                
-                this.moveToPosition(newX, newY);
+                if (this.auto_position) {
+                    // Position desklet at a reasonable default location on the target monitor
+                    let newX = targetMonitor.x + 50;  // 50px from left edge
+                    let newY = targetMonitor.y + 50;  // 50px from top edge
+                    
+                    global.log("[NextCloud Calendar] Auto-positioning to (" + newX + "," + newY + ") on monitor " + targetMonitor.index);
+                    let success = this.moveToPosition(newX, newY);
+                    if (!success) {
+                        global.log("[NextCloud Calendar] Position change may require desklet restart for full effect");
+                    }
+                } else {
+                    global.log("[NextCloud Calendar] Auto-position disabled, not moving desklet");
+                }
+            } else {
+                global.logError("[NextCloud Calendar] No target monitor found for setting: " + this.target_monitor);
             }
         } catch (e) {
             global.logError("[NextCloud Calendar] Error applying monitor settings: " + e.toString());
@@ -652,7 +1038,12 @@ with open(config_file, 'w') as f:
             if (this.position_x !== undefined && this.position_y !== undefined) {
                 global.log("[NextCloud Calendar] Applying manual position (" + 
                           this.position_x + "," + this.position_y + ")");
-                this.moveToPosition(this.position_x, this.position_y);
+                let success = this.moveToPosition(this.position_x, this.position_y);
+                if (!success) {
+                    global.log("[NextCloud Calendar] Manual position change may require desklet restart for full effect");
+                }
+            } else {
+                global.log("[NextCloud Calendar] Manual position coordinates not defined");
             }
         } catch (e) {
             global.logError("[NextCloud Calendar] Error applying manual position: " + e.toString());
@@ -675,36 +1066,62 @@ with open(config_file, 'w') as f:
     },
 
     /**
-     * Move desklet to specified position using proper Cinnamon methods.
+     * Move desklet to specified position using enhanced immediate positioning.
      */
     moveToPosition(x, y) {
         try {
             global.log("[NextCloud Calendar] moveToPosition called with (" + x + "," + y + ")");
             
-            // Try multiple positioning methods for compatibility
-            if (this.actor && this.actor.set_position) {
+            if (!this.actor) {
+                global.logError("[NextCloud Calendar] No actor available for positioning");
+                return false;
+            }
+            
+            // Log current position for comparison
+            let currentX = this.actor.get_x();
+            let currentY = this.actor.get_y();
+            global.log("[NextCloud Calendar] Current position: (" + currentX + "," + currentY + ") -> Moving to: (" + x + "," + y + ")");
+            
+            // Try positioning methods in order of preference
+            let success = false;
+            
+            // Method 1: set_position (most reliable)
+            if (this.actor.set_position) {
                 this.actor.set_position(x, y);
                 global.log("[NextCloud Calendar] Used actor.set_position");
-            } else if (this.actor && this.actor.move) {
-                this.actor.move(x, y);
-                global.log("[NextCloud Calendar] Used actor.move");
-            } else if (this.actor) {
+                success = true;
+            }
+            // Method 2: Direct property assignment
+            else if (this.actor.hasOwnProperty('x') && this.actor.hasOwnProperty('y')) {
                 this.actor.x = x;
                 this.actor.y = y;
                 global.log("[NextCloud Calendar] Set actor.x and actor.y directly");
-            } else {
-                global.logError("[NextCloud Calendar] No actor available for positioning");
+                success = true;
+            }
+            // Method 3: move method
+            else if (this.actor.move) {
+                this.actor.move(x, y);
+                global.log("[NextCloud Calendar] Used actor.move");
+                success = true;
             }
             
-            // Also try to update the position in metadata if available
-            if (this.metadata && this.instanceId !== undefined) {
-                global.log("[NextCloud Calendar] Attempting to save position to desklet metadata");
-                // This might help persist the position
-                this._onPositionChanged(x, y);
-            }
+            // Verify the position was set (with small delay for async operations)
+            Mainloop.timeout_add(50, Lang.bind(this, function() {
+                let newX = this.actor.get_x();
+                let newY = this.actor.get_y();
+                if (Math.abs(newX - x) > 10 || Math.abs(newY - y) > 10) {
+                    global.log("[NextCloud Calendar] Position verification: requested (" + x + "," + y + "), actual (" + newX + "," + newY + ") - position may have been overridden");
+                } else {
+                    global.log("[NextCloud Calendar] Position successfully applied: (" + newX + "," + newY + ")");
+                }
+                return false;
+            }));
+            
+            return success;
             
         } catch (e) {
             global.logError("[NextCloud Calendar] Error in moveToPosition: " + e.toString());
+            return false;
         }
     }
 };
@@ -713,8 +1130,3 @@ function main(metadata, deskletID) {
     let desklet = new NextCloudCalendarDesklet(metadata, deskletID);
     return desklet;
 }
-
-function main(metadata, deskletID) {
-    let desklet = new NextCloudCalendarDesklet(metadata, deskletID);
-    return desklet;
-};

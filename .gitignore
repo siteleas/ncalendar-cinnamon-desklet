@@ -82,3 +82,29 @@ output.txt
 *.temp
 temp/
 tmp/
+
+# Development and backup files
+*_backup
+*_backup[0-9]*
+*_enhanced
+*_fixed
+*-backup.js
+*-backup[0-9]*.js
+test_*.sh
+diagnose.sh
+view_logs.sh
+
+# Development documentation
+*_DIAGNOSIS.md
+*_ANALYSIS.md
+*_SOLUTION.md
+*_SUMMARY.md
+POSITIONING.md
+FIXED_*.md
+
+# Installation reports
+installation_report.txt
+requirements_minimal.txt
+
+# Python virtual environment for desklet
+ncalendar_venv/
