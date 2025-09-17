@@ -99,7 +99,15 @@ NextCloudCalendarDesklet.prototype = {
         this.settings.bind("location_color", "location_color", this.onDeskletFormatChanged, null);
         this.settings.bind("transparency", "transparency", this.onDeskletFormatChanged, null);
         this.settings.bind("cornerradius", "cornerradius", this.onDeskletFormatChanged, null);
+        
+        // Monitor and position settings
+        this.settings.bind("target_monitor", "target_monitor", this.onMonitorChanged, null);
+        this.settings.bind("position_x", "position_x", this.onPositionChanged, null);
+        this.settings.bind("position_y", "position_y", this.onPositionChanged, null);
+        this.settings.bind("auto_position", "auto_position", this.onPositionChanged, null);
+        
         this.setCalendarName();
+        this.detectMonitors();
 
         // Set header
         this.setHeader(_("NextCloud Calendar"));
@@ -189,6 +197,31 @@ NextCloudCalendarDesklet.prototype = {
      */
     on_desklet_clicked(event) {
         this.retrieveEventsIfAuthorized();
+    },
+
+    /**
+     * Called when monitor selection changes.
+     */
+    onMonitorChanged() {
+        this.applyMonitorSettings();
+    },
+
+    /**
+     * Called when position settings change.
+     */
+    onPositionChanged() {
+        if (this.auto_position) {
+            this.applyMonitorSettings();
+        } else {
+            this.applyManualPosition();
+        }
+    },
+
+    /**
+     * Called when the user clicks to detect monitors.
+     */
+    onDetectMonitorsClicked() {
+        this.detectMonitors();
     },
 
     //////////////////////////////////////////// Utility Functions ////////////////////////////////////////////
@@ -512,6 +545,122 @@ with open(config_file, 'w') as f:
         if (accountId != null && accountId !== "") {
             command.push("--account", accountId);
         }
+    },
+
+    //////////////////////////////////////////// Monitor Management Functions ////////////////////////////////////////////
+    /**
+     * Detect available monitors and their configurations.
+     */
+    detectMonitors() {
+        try {
+            let display = global.display;
+            if (display && display.get_n_monitors) {
+                let nMonitors = display.get_n_monitors();
+                global.log("[NextCloud Calendar] Detected " + nMonitors + " monitors");
+                
+                this.availableMonitors = [];
+                for (let i = 0; i < nMonitors; i++) {
+                    let geometry = display.get_monitor_geometry(i);
+                    let isPrimary = (i === display.get_primary_monitor());
+                    
+                    this.availableMonitors.push({
+                        index: i,
+                        x: geometry.x,
+                        y: geometry.y,
+                        width: geometry.width,
+                        height: geometry.height,
+                        primary: isPrimary
+                    });
+                    
+                    global.log("[NextCloud Calendar] Monitor " + i + ": " + 
+                              geometry.width + "x" + geometry.height + 
+                              " at (" + geometry.x + "," + geometry.y + ")" +
+                              (isPrimary ? " [PRIMARY]" : ""));
+                }
+            }
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error detecting monitors: " + e.toString());
+        }
+    },
+
+    /**
+     * Apply monitor settings based on target_monitor selection.
+     */
+    applyMonitorSettings() {
+        if (!this.availableMonitors || this.availableMonitors.length === 0) {
+            this.detectMonitors();
+        }
+        
+        let targetMonitor = null;
+        
+        try {
+            switch (this.target_monitor) {
+                case "primary":
+                    targetMonitor = this.availableMonitors.find(m => m.primary);
+                    break;
+                case "monitor0":
+                    targetMonitor = this.availableMonitors[0];
+                    break;
+                case "monitor1":
+                    targetMonitor = this.availableMonitors[1];
+                    break;
+                case "monitor2":
+                    targetMonitor = this.availableMonitors[2];
+                    break;
+                case "auto":
+                default:
+                    // Use current monitor or primary as fallback
+                    let currentX = this.actor.get_x();
+                    let currentY = this.actor.get_y();
+                    targetMonitor = this.getMonitorAtPosition(currentX, currentY) || 
+                                  this.availableMonitors.find(m => m.primary) ||
+                                  this.availableMonitors[0];
+                    break;
+            }
+            
+            if (targetMonitor && this.auto_position) {
+                // Position desklet at a reasonable default location on the target monitor
+                let newX = targetMonitor.x + 50;  // 50px from left edge
+                let newY = targetMonitor.y + 50;  // 50px from top edge
+                
+                global.log("[NextCloud Calendar] Moving to monitor " + targetMonitor.index + 
+                          " at position (" + newX + "," + newY + ")");
+                
+                this.actor.set_position(newX, newY);
+            }
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error applying monitor settings: " + e.toString());
+        }
+    },
+
+    /**
+     * Apply manual positioning.
+     */
+    applyManualPosition() {
+        try {
+            if (this.position_x !== undefined && this.position_y !== undefined) {
+                global.log("[NextCloud Calendar] Applying manual position (" + 
+                          this.position_x + "," + this.position_y + ")");
+                this.actor.set_position(this.position_x, this.position_y);
+            }
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error applying manual position: " + e.toString());
+        }
+    },
+
+    /**
+     * Get the monitor that contains the given position.
+     */
+    getMonitorAtPosition(x, y) {
+        if (!this.availableMonitors) return null;
+        
+        for (let monitor of this.availableMonitors) {
+            if (x >= monitor.x && x < monitor.x + monitor.width &&
+                y >= monitor.y && y < monitor.y + monitor.height) {
+                return monitor;
+            }
+        }
+        return null;
     }
 };
 

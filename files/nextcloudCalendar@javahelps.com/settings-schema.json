@@ -3,6 +3,7 @@
     "type": "layout",
     "pages": [
       "page_nextcloud",
+      "page_display",
       "page_style"
     ],
     "page_nextcloud": {
@@ -10,6 +11,13 @@
       "title": "NextCloud Calendar",
       "sections": [
         "section_nextcloud"
+      ]
+    },
+    "page_display": {
+      "type": "page",
+      "title": "Display & Monitor",
+      "sections": [
+        "section_display"
       ]
     },
     "page_style": {
@@ -34,6 +42,18 @@
         "calendarNames",
         "interval",
         "delay"
+      ]
+    },
+    "section_display": {
+      "type": "section",
+      "title": "",
+      "keys": [
+        "display_header",
+        "target_monitor",
+        "detect_monitors_button",
+        "position_x",
+        "position_y",
+        "auto_position"
       ]
     },
     "section_style": {
@@ -230,5 +250,57 @@
     "units": "px",
     "description": "Corner radius",
     "tooltip": "Radius for rounding the desklet's corners"
+  },
+
+  "display_header": {
+    "type": "header",
+    "description": "Monitor and Position Settings"
+  },
+  "target_monitor": {
+    "type": "combobox",
+    "default": "auto",
+    "description": "Target Monitor",
+    "tooltip": "Select which monitor to display the desklet on",
+    "options": {
+      "auto": "Auto (Current)",
+      "primary": "Primary Monitor",
+      "monitor0": "Monitor 1",
+      "monitor1": "Monitor 2",
+      "monitor2": "Monitor 3"
+    }
+  },
+  "detect_monitors_button": {
+    "type": "button",
+    "description": "Detect Available Monitors",
+    "tooltip": "Scan for available monitors and update the monitor list",
+    "callback": "onDetectMonitorsClicked"
+  },
+  "auto_position": {
+    "type": "checkbox",
+    "default": true,
+    "description": "Auto-position on monitor",
+    "tooltip": "Automatically position desklet when moving between monitors"
+  },
+  "position_x": {
+    "type": "spinbutton",
+    "default": 100,
+    "min": 0,
+    "max": 3000,
+    "description": "X Position",
+    "tooltip": "Horizontal position on the selected monitor",
+    "units": "px",
+    "step": 10,
+    "dependency": "!auto_position"
+  },
+  "position_y": {
+    "type": "spinbutton",
+    "default": 100,
+    "min": 0,
+    "max": 2000,
+    "description": "Y Position",
+    "tooltip": "Vertical position on the selected monitor",
+    "units": "px",
+    "step": 10,
+    "dependency": "!auto_position"
   }
 }
