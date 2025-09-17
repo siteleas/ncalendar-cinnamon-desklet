@@ -108,3 +108,8 @@ requirements_minimal.txt
 
 # Python virtual environment for desklet
 ncalendar_venv/
+
+# Omit Warp terminal files
+.warp
+.warp*
+.warp/
