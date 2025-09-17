@@ -1,20 +1,24 @@
 /*
-* NextCloud Calendar Desklet displays your agenda based on your NextCloud Calendar in Cinnamon desktop.
+* NextCloud Calendar Desklet - Enhanced Cinnamon Desktop Calendar
+* 
+* Copyright (c) 2025 New Creation Computing
+* Developed by Jim Moen and the New Creation Computing Development Team
+* 
+* Website: https://newcreationcomputing.ca
+* Email: info@newcreationcomputing.ca
+* GitHub: https://github.com/siteleas/ncalendar-cinnamon-desklet
 *
-* Copyright (C) 2025
+* This software is FREE and OPEN SOURCE under custom license terms.
+* Credits to New Creation Computing must remain in all distributions.
 *
-* This program is free software: you can redistribute it and/or modify
-* it under the terms of the GNU General Public License as published by
-* the Free Software Foundation, either version 3 of the License, or
-* (at your option) any later version.
+* Features:
+* - Live positioning and multi-monitor support
+* - Enhanced event clicking with browser integration
+* - Robust error handling and dependency management
+* - Cross-platform installation scripts
 *
-* This program is distributed in the hope that it will be useful,
-* but WITHOUT ANY WARRANTY; without even the implied warranty of
-* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-* GNU General Public License for more details.
-*
-* You should have received a copy of the GNU General Public License
-* along with this program.  If not, see <http:*www.gnu.org/licenses/>.
+* This program is free software with attribution requirements.
+* See LICENSE file for complete terms.
 */
 
 "use strict";
@@ -140,6 +144,13 @@ NextCloudCalendarDesklet.prototype = {
         }));
         this._menu.addMenuItem(refreshEventsItem);
         
+        // Add About/Credits menu item
+        let aboutItem = new PopupMenu.PopupIconMenuItem(_("About NextCloud Calendar"), "dialog-information", St.IconType.SYMBOLIC);
+        aboutItem.connect("activate", Lang.bind(this, function() {
+            this.showAboutDialog();
+        }));
+        this._menu.addMenuItem(aboutItem);
+        
         // Set up ncalendar configuration when credentials are available
         this.setupNCaendarIfNeeded();
         
@@ -262,6 +273,44 @@ NextCloudCalendarDesklet.prototype = {
         } catch (e) {
             global.logError("[NextCloud Calendar] Error showing event details: " + e.toString());
             GLib.spawn_command_line_async('notify-send "NextCloud Calendar" "Error showing event details"');
+        }
+    },
+
+    /**
+     * Show About dialog with credits and contact information.
+     */
+    showAboutDialog() {
+        try {
+            let aboutText = "NextCloud Calendar Desklet v2.0\n";
+            aboutText += "Enhanced Cinnamon Desktop Calendar\n\n";
+            aboutText += "🏢 DEVELOPED BY\n";
+            aboutText += "New Creation Computing\n";
+            aboutText += "Lead Developer: Jim Moen\n\n";
+            aboutText += "🌐 CONTACT INFORMATION\n";
+            aboutText += "Website: https://newcreationcomputing.ca\n";
+            aboutText += "Email: info@newcreationcomputing.ca\n";
+            aboutText += "GitHub: https://github.com/siteleas/ncalendar-cinnamon-desklet\n\n";
+            aboutText += "✨ FEATURES\n";
+            aboutText += "• Live positioning & multi-monitor support\n";
+            aboutText += "• Enhanced event clicking with browser integration\n";
+            aboutText += "• Robust error handling & dependency management\n";
+            aboutText += "• Cross-platform installation scripts\n\n";
+            aboutText += "📄 LICENSE\n";
+            aboutText += "This software is FREE and OPEN SOURCE\n";
+            aboutText += "Credits to New Creation Computing must remain in all distributions\n\n";
+            aboutText += "© 2025 New Creation Computing - All Rights Reserved";
+            
+            // Show notification with credits
+            let cmd = 'notify-send -t 15000 "NextCloud Calendar Desklet" "' + aboutText.replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
+            GLib.spawn_command_line_async(cmd);
+            
+            // Also open website
+            GLib.spawn_command_line_async("xdg-open https://newcreationcomputing.ca");
+            
+            global.log("[NextCloud Calendar] About dialog shown with New Creation Computing credits");
+            
+        } catch (e) {
+            global.logError("[NextCloud Calendar] Error showing about dialog: " + e.toString());
         }
     },
 

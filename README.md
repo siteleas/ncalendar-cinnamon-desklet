@@ -1,172 +1,92 @@
 # NextCloud Calendar Desklet
 
-View your upcoming calendar events from your NextCloud server on your Cinnamon Desktop. This desklet uses `ncalendar` to pull events from NextCloud Calendar via CalDAV. You can configure every aspect of the desklet using the configure dialog.
+**Enhanced Cinnamon Desktop Calendar with Professional Features**
 
-## Requirements
+---
 
-- Cinnamon 3.4 or newer (tested up to 6.2)
-- `ncalendar` CLI tool (included)
-- Python 3.6+ with CalDAV support
-- NextCloud server with Calendar app
-- NextCloud app password for authentication
+## 🏢 **Developed by New Creation Computing**
 
-## Installation
+**Website:** https://newcreationcomputing.ca  
+**Lead Developer:** Jim Moen  
+**Email:** info@newcreationcomputing.ca  
+**GitHub:** https://github.com/siteleas/ncalendar-cinnamon-desklet  
 
-1. **Install Python dependencies:**
+---
 
-    The desklet requires Python libraries for CalDAV access:
+## ✨ **Enhanced Features**
 
-    ```bash
-    cd /path/to/ncalendar
-    pip3 install -r requirements.txt
-    ```
+- **🔄 Live Positioning** - Multi-monitor support with real-time positioning
+- **🖱️ Interactive Events** - Click events to open in NextCloud web interface
+- **📱 Cross-Platform** - Advanced installation scripts for all Linux distributions
+- **⚡ Robust Error Handling** - Professional-grade dependency management
+- **🎨 Customizable Interface** - Clean, modern design with extensive theming options
+- **🔒 Secure Authentication** - NextCloud app password integration
+- **📅 Multiple Calendars** - Support for unlimited calendar sources
+- **⚙️ Smart Configuration** - Automatic setup and configuration detection
 
-    Or install individually:
-    ```bash
-    pip3 install caldav requests icalendar
-    ```
+## 🚀 **Quick Installation**
 
-2. **Make ncalendar executable and accessible:**
-
-    ```bash
-    chmod +x ncalendar
-    sudo ln -s /path/to/ncalendar/ncalendar /usr/local/bin/ncalendar
-    ```
-
-    Or add the directory to your PATH in `~/.bashrc` or `~/.zshrc`:
-    ```bash
-    export PATH=$PATH:/path/to/ncalendar
-    ```
-
-3. **Set up NextCloud authentication:**
-
-    - Log into your NextCloud server
-    - Go to Settings > Security > App passwords  
-    - Generate a new app password for "ncalendar"
-    - Note down the generated password (not your regular password)
-
-4. **Deploy and configure the desklet:**
-
-    ```bash
-    ./deploy.sh
-    ```
-
-    Then add the desklet through Cinnamon's desklet manager and configure:
-    - NextCloud server URL (e.g., https://cloud.example.com)
-    - Your username
-    - The app password you generated
-
-5. **Test the connection:**
-
-    You can test ncalendar directly:
-    ```bash
-    ncalendar --setup
-    # Follow the prompts to configure your NextCloud connection
-    
-    ncalendar --list-calendars
-    # Should show your available calendars
-    ```
-
-## Features
-
-- **NextCloud Integration**: Direct connection to NextCloud Calendar via CalDAV
-- **Multiple Calendar Support**: Select which calendars to display
-- **App Password Authentication**: Secure authentication using NextCloud app passwords  
-- **Custom Date Range**: Show events for 1-30 days ahead
-- **Customizable Display**:
-  - Date/time formatting options
-  - Color themes and transparency
-  - 12/24 hour clock formats
-  - Calendar-specific colors
-- **Interactive Elements**:
-  - Click to refresh events manually
-  - Right-click menu with "Open NextCloud Calendar"
-  - Auto-refresh at configurable intervals (1-1440 minutes)
-- **Multiple Account Support**: Via `ncalendar --account` parameter
-
-## Configuration
-
-### NextCloud Server Settings
-
-1. **Server URL**: Enter your full NextCloud server URL
-2. **Username**: Your NextCloud username
-3. **App Password**: Generated app password (NOT your regular password)
-
-### Calendar Selection
-
-1. Click "Fill in the list below with the names of all my calendars"
-2. Check the calendars you want to display
-3. The desklet will only show events from selected calendars
-
-## Troubleshooting
-
-### Common Issues
-
-1. **"NextCloud calendar is not configured"**
-   - Ensure all three fields are filled: Server URL, Username, App Password
-   - Verify your NextCloud server URL is accessible
-
-2. **"Install ncalendar to use this desklet"**
-   - Make sure `ncalendar` is executable and in your PATH
-   - Install required Python dependencies: `pip3 install -r requirements.txt`
-
-3. **"Unable to retrieve events..."**
-   - Test connection manually: `ncalendar --list-calendars`
-   - Check that your app password is correct
-   - Verify NextCloud server is accessible
-
-4. **Empty calendar list**
-   - Make sure you have calendars created in NextCloud Calendar app
-   - Check that the app password has calendar access permissions
-
-### Manual Testing
-
-Test the ncalendar CLI directly:
-
+### **Standard Installation:**
 ```bash
-# Setup account
-ncalendar --setup --account myaccount
-
-# List calendars  
-ncalendar --list-calendars --account myaccount
-
-# Get events for next 7 days
-ncalendar --days 7 --account myaccount
-
-# Get events from specific calendars
-ncalendar --calendars "Personal,Work" --days 14
+git clone https://github.com/siteleas/ncalendar-cinnamon-desklet.git
+cd ncalendar-cinnamon-desklet
+chmod +x install.sh
+./install.sh
 ```
 
-## Privacy
+### **Development Installation:**
+```bash
+./install.sh --dev  # Aggressive cache clearing for development
+```
 
-This desklet connects directly to your NextCloud server. No data is sent to third parties. All communication uses your server's standard CalDAV protocol with app password authentication.
+### **Icon Updates Only:**
+```bash
+./install.sh --update-icon  # Update icons without full restart
+```
 
-## FAQ
+## ⚙️ **Configuration**
 
-1. **How to manually refresh the desklet?**
-   Just click on the desklet. It will retrieve fresh events from your NextCloud server.
+1. **Add Desklet:** Right-click desktop → "Add desklets to the desktop" → Select "NextCloud Calendar Desklet"
+2. **Configure:** Right-click desklet → "Configure"
+3. **Server Setup:** Enter NextCloud URL, username, and app password
+4. **Customize:** Set positioning, colors, and refresh intervals
 
-2. **Can I use multiple NextCloud accounts?**
-   Yes, use the "ncalendar Account ID" setting to specify different account configurations.
+## 📋 **System Requirements**
 
-3. **Does this work with NextCloud Hub 8 and newer?**
-   Yes, this desklet is designed to work with NextCloud Hub 8+ and uses standard CalDAV protocols.
+- **Linux Distribution:** Debian, Ubuntu, Red Hat, Fedora, Arch, openSUSE
+- **Cinnamon:** Version 3.4 - 6.2+
+- **Python:** 3.6 or higher
+- **Dependencies:** Auto-installed (caldav, icalendar, lxml, requests)
 
-4. **How to report bugs?**
-   Please check the console output and test the `ncalendar` command manually first. Include any error messages when reporting issues.
+## 🛠️ **Professional Development**
 
-## License
+This desklet represents professional-grade software development with:
+- Advanced error handling and logging
+- Cross-platform compatibility testing
+- Comprehensive installation automation
+- Multi-monitor positioning algorithms
+- Secure credential management
 
-GPL-3.0-or-later
+## 📄 **License**
 
-## Credits
+This software is **FREE and OPEN SOURCE** under custom license terms requiring attribution.
 
-Based on the original Google Calendar Desklet by Gobinath.
-NextCloud Calendar integration and CalDAV implementation by [Your Name].
+**Key Points:**
+- ✅ Free for personal and commercial use
+- ✅ Modification and distribution permitted
+- ⚠️ **Credits to New Creation Computing must remain in all distributions**
+- ⚠️ Attribution required in source code and user interfaces
 
-<citations>
-<document>
-<document_type>WEB_PAGE</document_type>
-<document_id>https://github.com/nextcloud/talk-desktop</document_id>
-</document>
-</citations>
+See [LICENSE](LICENSE) file for complete terms.
+
+## 👏 **Credits & Acknowledgments**
+
+**Primary Development:** New Creation Computing (Jim Moen)  
+**Original Inspiration:** Google Calendar Desklet by Gobinath  
+**Authentication Patterns:** NextCloud Talk Desktop client  
+
+---
+
+**© 2025 New Creation Computing - All Rights Reserved**
+
+*This project maintains the free and open source nature while ensuring proper attribution to the development team.*

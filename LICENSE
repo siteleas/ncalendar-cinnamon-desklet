@@ -1,24 +1,61 @@
-GNU GENERAL PUBLIC LICENSE
-Version 3, 29 June 2007
+NextCloud Calendar Desklet - Custom Open Source License
 
-Copyright (C) 2025 NextCloud Calendar Desklet Contributors
+Copyright (c) 2025 New Creation Computing
+Developed by Jim Moen and the New Creation Computing Development Team
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+1. ATTRIBUTION REQUIREMENT:
+   The above copyright notice and this permission notice shall be included in all
+   copies or substantial portions of the Software.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+2. CREDITS REQUIREMENT:
+   All distributions, modifications, or derivative works must retain the original
+   development credits to New Creation Computing and the development team. The
+   credits must remain visible in:
+   - All source code file headers
+   - The desklet's right-click menu "About" section
+   - Any user interface displaying version or author information
+   - Documentation and README files
+
+3. DEVELOPER CONTACT INFORMATION:
+   When credits are displayed, they must include:
+   - New Creation Computing (https://newcreationcomputing.ca)
+   - Lead Developer: Jim Moen
+   - Email: info@newcreationcomputing.ca
+   - GitHub: https://github.com/siteleas/ncalendar-cinnamon-desklet
+
+4. COMMERCIAL USE:
+   Commercial use is permitted under this license provided the attribution
+   and credits requirements are met.
+
+5. MODIFICATION:
+   Modifications are permitted provided:
+   - Original credits remain intact
+   - Modified versions clearly indicate changes made
+   - The original license terms continue to apply
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+This software is FREE and OPEN SOURCE. The credits requirement ensures proper
+attribution to the development team while maintaining the free and open nature
+of the project.
 
 ---
 
-This project is based on the Google Calendar Desklet by Gobinath,
+ACKNOWLEDGMENTS:
+This project builds upon the Google Calendar Desklet by Gobinath,
 which is also licensed under GPL-3.0-or-later.
 
 Portions of the authentication flow are inspired by the NextCloud Talk

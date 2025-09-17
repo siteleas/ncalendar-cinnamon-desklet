@@ -1,8 +1,14 @@
 {
     "uuid": "nextcloudCalendar@javahelps.com",
-    "description": "A desklet that displays your agenda based on NextCloud Calendar",
-    "name": "NextCloud Calendar",
-    "max-instances": "10",
+    "name": "NextCloud Calendar Desklet",
+    "description": "Enhanced Cinnamon Desktop Calendar with live positioning, multi-monitor support, and browser integration. Developed by New Creation Computing.",
+    "version": "2.0.0",
+    "author": "New Creation Computing (Jim Moen)",
+    "website": "https://newcreationcomputing.ca",
+    "url": "https://github.com/siteleas/ncalendar-cinnamon-desklet",
+    "max-instances": "5",
     "prevent-decorations": true,
-    "cinnamon-version": ["3.4", "3.6", "3.8", "4.0", "4.2", "4.4", "4.6", "5.0", "5.2", "5.4", "5.6", "5.8", "6.0", "6.2"]
+    "icon": "nextcloud-calendar",
+    "cinnamon-version": ["3.4", "3.6", "3.8", "4.0", "4.2", "4.4", "4.6", "5.0", "5.2", "5.4", "5.6", "5.8", "6.0", "6.2"],
+    "credits": "Developed by New Creation Computing. Original work by Gobinath (Google Calendar Desklet). Licensed under custom open source terms requiring attribution."
 }
