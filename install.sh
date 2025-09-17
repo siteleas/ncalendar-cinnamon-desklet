@@ -88,6 +88,9 @@ install_system_packages() {
             
             # Install additional development tools if needed
             sudo apt-get install -y python3-dev python3-setuptools || true
+            
+            # Install emoji font support
+            sudo apt-get install -y fonts-noto-color-emoji fonts-symbola || true
             ;;
             
         "fedora"|"rhel"|"centos"|"rocky"|"alma")
@@ -117,6 +120,9 @@ install_system_packages() {
             
             # Install additional development tools if needed
             sudo $PKG_MGR install -y python3-devel python3-setuptools || true
+            
+            # Install emoji font support
+            sudo $PKG_MGR install -y google-noto-emoji-fonts || true
             ;;
             
         "arch"|"manjaro")
@@ -139,6 +145,9 @@ install_system_packages() {
             
             # Try to install required packages via system package manager first
             sudo pacman -S --noconfirm python-requests python-lxml || true
+            
+            # Install emoji font support
+            sudo pacman -S --noconfirm noto-fonts-emoji || true
             ;;
             
         "opensuse"|"sles")
@@ -161,6 +170,9 @@ install_system_packages() {
             
             # Try to install required packages via system package manager first
             sudo zypper install -y python3-requests python3-lxml || true
+            
+            # Install emoji font support
+            sudo zypper install -y noto-coloremoji-fonts || true
             ;;
             
         *)
@@ -345,7 +357,7 @@ create_report() {
     log "Creating installation report..."
     
     cat > "$report_file" << EOF
-NextCloud Calendar Desklet Installation Report
+NextCloud Calendar Desklet v0.2.115 Installer
 ==============================================
 Date: $(date)
 System: $DISTRO_NAME
@@ -388,6 +400,21 @@ try:
     print('- caldav: Available')
 except ImportError:
     print('- caldav: Missing')
+
+# Check for emoji font support
+font_paths = [
+    '/usr/share/fonts/noto-emoji',       # RedHat/Fedora
+    '/usr/share/fonts/noto',             # Arch
+    '/usr/share/fonts/truetype/noto',    # Debian/Ubuntu
+    '/usr/share/fonts/noto-coloremoji'   # OpenSUSE
+]
+
+for path in font_paths:
+    if os.path.exists(path):
+        print('- Emoji font support: Available')
+        break
+else:
+    print('- Emoji font support: Missing')
 " 2>/dev/null)
 
 Next Steps:
@@ -462,6 +489,26 @@ main() {
     echo
     success "Installation completed successfully!"
     echo
+    
+    # Check emoji font support
+    local emoji_fonts_installed=false
+    for path in '/usr/share/fonts/noto-emoji' '/usr/share/fonts/noto' '/usr/share/fonts/truetype/noto' '/usr/share/fonts/noto-coloremoji'; do
+        if [ -d "$path" ]; then
+            emoji_fonts_installed=true
+            break
+        fi
+    done
+    
+    if [ "$emoji_fonts_installed" = false ]; then
+        warning "Emoji fonts not found - some icons may not display correctly"
+        log "To enable emoji support, install one of these packages:"
+        log "- Debian/Ubuntu: fonts-noto-color-emoji fonts-symbola"
+        log "- RedHat/Fedora: google-noto-emoji-fonts"
+        log "- Arch: noto-fonts-emoji"
+        log "- OpenSUSE: noto-coloremoji-fonts"
+        echo
+    fi
+    
     log "You can now:"
     log "1. Add the NextCloud Calendar desklet through Cinnamon's desklet manager"
     log "2. Configure your NextCloud server in the desklet settings"

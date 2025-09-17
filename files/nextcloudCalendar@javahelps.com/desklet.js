@@ -2,10 +2,10 @@
 * NextCloud Calendar Desklet - Enhanced Cinnamon Desktop Calendar
 * 
 * Copyright (c) 2025 New Creation Computing
-* Developed by Jim Moen and the New Creation Computing Development Team
+* Developed by Jim Blake and the New Creation Computing Development Team
 * 
-* Website: https://newcreationcomputing.ca
-* Email: info@newcreationcomputing.ca
+* Website: http://nccomputing.ca
+* Email: support@nccomputing.ca
 * GitHub: https://github.com/siteleas/ncalendar-cinnamon-desklet
 *
 * This software is FREE and OPEN SOURCE under custom license terms.
@@ -281,31 +281,30 @@ NextCloudCalendarDesklet.prototype = {
      */
     showAboutDialog() {
         try {
-            let aboutText = "NextCloud Calendar Desklet v2.0\n";
+            let aboutText = "NextCloud Calendar Desklet v0.2.115\n";
             aboutText += "Enhanced Cinnamon Desktop Calendar\n\n";
-            aboutText += "🏢 DEVELOPED BY\n";
+            aboutText += "=== DEVELOPED BY ===\n";
             aboutText += "New Creation Computing\n";
-            aboutText += "Lead Developer: Jim Moen\n\n";
-            aboutText += "🌐 CONTACT INFORMATION\n";
-            aboutText += "Website: https://newcreationcomputing.ca\n";
-            aboutText += "Email: info@newcreationcomputing.ca\n";
+            aboutText += "Lead Developer: Jim Blake\n\n";
+            aboutText += "=== CONTACT INFORMATION ===\n";
+            aboutText += "Website: http://nccomputing.ca\n";
+            aboutText += "Email: support@nccomputing.ca\n";
             aboutText += "GitHub: https://github.com/siteleas/ncalendar-cinnamon-desklet\n\n";
-            aboutText += "✨ FEATURES\n";
-            aboutText += "• Live positioning & multi-monitor support\n";
-            aboutText += "• Enhanced event clicking with browser integration\n";
-            aboutText += "• Robust error handling & dependency management\n";
-            aboutText += "• Cross-platform installation scripts\n\n";
-            aboutText += "📄 LICENSE\n";
+            aboutText += "=== FEATURES ===\n";
+            aboutText += "* Live positioning & multi-monitor support\n";
+            aboutText += "* Enhanced event clicking with browser integration\n";
+            aboutText += "* Robust error handling & dependency management\n";
+            aboutText += "* Cross-platform installation scripts\n\n";
+            aboutText += "=== LICENSE ===\n";
             aboutText += "This software is FREE and OPEN SOURCE\n";
             aboutText += "Credits to New Creation Computing must remain in all distributions\n\n";
-            aboutText += "© 2025 New Creation Computing - All Rights Reserved";
-            
+            aboutText += "(c) 2025 New Creation Computing - All Rights Reserved";
             // Show notification with credits
             let cmd = 'notify-send -t 15000 "NextCloud Calendar Desklet" "' + aboutText.replace(/"/g, '\\"').replace(/\n/g, '\\n') + '"';
             GLib.spawn_command_line_async(cmd);
             
             // Also open website
-            GLib.spawn_command_line_async("xdg-open https://newcreationcomputing.ca");
+            GLib.spawn_command_line_async("xdg-open http://nccomputing.ca");
             
             global.log("[NextCloud Calendar] About dialog shown with New Creation Computing credits");
             
@@ -340,28 +339,28 @@ NextCloudCalendarDesklet.prototype = {
             });
             
             // Add event details
-            this.addEventDetail(detailsBox, '📅 Date:', this.formatEventDateRange(event));
+            this.addEventDetail(detailsBox, '[Date]', this.formatEventDateRange(event));
             
             if (event.startTime !== '00:00' || event.endTime !== '00:00') {
                 let timeText = this.formatEventTimeRange(event);
                 if (timeText) {
-                    this.addEventDetail(detailsBox, '🕐 Time:', timeText);
+                    this.addEventDetail(detailsBox, '[Time]', timeText);
                 }
             } else {
-                this.addEventDetail(detailsBox, '📅 Type:', 'All Day Event');
+                this.addEventDetail(detailsBox, '[Type]', 'All Day Event');
             }
             
             if (event.location && event.location !== '') {
-                this.addEventDetail(detailsBox, '📍 Location:', event.location);
+                this.addEventDetail(detailsBox, '[Location]', event.location);
             }
             
             // Add calendar info if available
             if (event.calendar_name) {
                 let calendarText = event.calendar_name;
                 if (event.color) {
-                    calendarText = '● ' + calendarText;
+                    calendarText = '* ' + calendarText;
                 }
-                this.addEventDetail(detailsBox, '📚 Calendar:', calendarText, event.color);
+                this.addEventDetail(detailsBox, '[Calendar]', calendarText, event.color);
             }
             
             dialog.contentLayout.add(detailsBox);
@@ -700,9 +699,9 @@ with open(config_file, 'w') as f:
         try {
             // Add a small clickable button/icon next to the event
             let clickButton = new St.Button({
-                label: '🔗',  // Link icon
+                label: '>',  // Simple arrow indicator
                 style_class: 'event-click-button',
-                style: 'padding: 2px; margin-left: 5px; font-size: 10pt;'
+                style: 'padding: 2px 5px; margin-left: 5px; font-size: 10pt; font-weight: bold;'
             });
             
             clickButton.connect('clicked', Lang.bind(this, function() {
@@ -725,7 +724,7 @@ with open(config_file, 'w') as f:
      */
     showLoadingIndicator() {
         this.resetWidget(true);
-        let loadingLabel = CalendarUtility.label("🔄 Loading events...", this.zoom, this.textcolor);
+        let loadingLabel = CalendarUtility.label("... Loading events ...", this.zoom, this.textcolor);
         this.window.add(loadingLabel);
     },
     
