@@ -77,7 +77,7 @@
     "default": "",
     "description": "App password",
     "tooltip": "Generate an app password in NextCloud Settings > Security > App passwords"
-  }
+  },
   "sep1": {
     "type": "separator"
   },
@@ -90,7 +90,7 @@
     "default": "",
     "description": "ncalendar Account ID (optional)",
     "tooltip": "Enter ncalendar --account id (leave empty for default)"
-  }
+  },
   "allNamesButton": {
     "type": "button",
     "description": "Fill in the list below with the names of all my calendars",
