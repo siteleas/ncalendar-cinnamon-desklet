@@ -39,14 +39,14 @@ const PopupMenu = imports.ui.popupMenu;
 const ModalDialog = imports.ui.modalDialog;
 
 // Import local libraries
-imports.searchPath.unshift(GLib.get_home_dir() + "/.local/share/cinnamon/desklets/nextcloudCalendar@javahelps.com/lib");
+imports.searchPath.unshift(GLib.get_home_dir() + "/.local/share/cinnamon/desklets/nextcloudCalendar@nccomputing.ca/lib");
 const XDate = imports.utility.XDate;
 const SpawnReader = imports.utility.SpawnReader;
 const Event = imports.utility.Event;
 const CalendarUtility = new imports.utility.CalendarUtility();
 
 
-const UUID = "nextcloudCalendar@javahelps.com";
+const UUID = "nextcloudCalendar@nccomputing.ca";
 const SEPARATOR_LINE = "\n\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015\u2015";
 
 Gettext.bindtextdomain(UUID, GLib.get_home_dir() + "/.local/share/locale");
@@ -197,7 +197,7 @@ NextCloudCalendarDesklet.prototype = {
         // List of calendars already selected by user:
         let registeredCalendarNames = this.calendarName.toString().split(",");
         // List of all the user's calendars:
-        var calendars = []; // We will populate it !
+        var calendars = [];
         this.calendarNames = [];
         reader.spawn(HOME_PATH, command, (output) => {
             let names = output.toString().trim().split(/\r?\n/);
@@ -208,7 +208,7 @@ NextCloudCalendarDesklet.prototype = {
                     display
                 });
             });
-            this.calendarNames = calendars; // Refreshes the array in Settings.
+            this.calendarNames = calendars;
         });
     },
 
@@ -820,18 +820,21 @@ with open(config_file, 'w') as f:
     },
 
     showErrorMessage(errorMessage) {
-        this.resetWidget(true);
-        let message = _("Unknown Error");
-        let hint = errorMessage;
-        if (errorMessage.includes("No such file or directory") || errorMessage.includes("ncalendar")) {
-            message = _("Install ncalendar to use this desklet.");
-            hint = _("Run: ") + "pip3 install -r requirements.txt";
-        }
-        let label = CalendarUtility.label(message, this.zoom, this.textcolor);
-        let lblHint = CalendarUtility.label(hint, this.zoom, this.location_color, true, 8);
-        lblHint.style = lblHint.style + "; font-style: italic;";
-        this.window.add(label);
-        this.window.add(lblHint);
+        let message = "Error: " + errorMessage;
+        let errorLabel = CalendarUtility.label(message, this.zoom, "#FF0000", true, 10);
+        errorLabel.style = errorLabel.style + "; margin-bottom: 5px;";
+        this.window.add(errorLabel);
+        
+        let retryButton = new St.Button({
+            label: "Retry",
+            style: 'padding: 2px 10px; margin-top: 5px; background-color: rgba(255,255,255,0.1); border-radius: 3px;'
+        });
+        
+        retryButton.connect('clicked', Lang.bind(this, function() {
+            this.retrieveEventsIfAuthorized();
+        }));
+        
+        this.window.add(retryButton);
     },
 
     /**
@@ -842,33 +845,71 @@ with open(config_file, 'w') as f:
             return;
         }
         this.updateInProgress = true;
-        var outputReceived = false;
+        
         try {
-            // Execute the command to retrieve the calendar events.
+            // Save current events for fallback
+            const previousEvents = [...this.eventsList];
+            const previousWidget = this.window;
+            
+            // Create new window for clean state
+            this.window = CalendarUtility.window(this.cornerradius, this.textcolor, this.bgcolor, this.transparency);
+            
+            // Show loading state
+            let loadingLabel = CalendarUtility.label("Loading events...", this.zoom, this.textcolor);
+            this.window.add(loadingLabel);
+            this.setContent(this.window);
+            
+            // Execute the command to retrieve the calendar events
             let reader = new SpawnReader();
-            let error = false;
             reader.spawn(HOME_PATH, this.getCalendarCommand(accountId), (output) => {
-                this.resetWidget(true);
-                if (!outputReceived) {
-                    outputReceived = true;
-                }
-                let eventLine = output.toString();
                 try {
-                    this.addEvent(eventLine);
-                    error = false;
+                    // Parse new events
+                    let eventLine = output.toString();
+                    let eventsData = JSON.parse(eventLine);
+                    
+                    // Check for error in response
+                    if (eventsData.error) {
+                        throw new Error(eventsData.error);
+                    }
+                    
+                    // Only proceed if we got valid data
+                    if (Array.isArray(eventsData)) {
+                        // Create fresh window
+                        this.window = CalendarUtility.window(this.cornerradius, this.textcolor, this.bgcolor, this.transparency);
+                        this.eventsList = [];
+                        
+                        if (eventsData.length === 0) {
+                            // No events case
+                            this.window.add(CalendarUtility.label(_("No events found"), this.zoom, this.textcolor));
+                        } else {
+                            // Add new events
+                            eventsData.forEach((element) => {
+                                let event = new Event(element, this.use_24h_clock);
+                                this.eventsList.push(event);
+                                this.addEventToWidget(event);
+                            });
+                        }
+                        
+                        // Set the new content
+                        this.setContent(this.window);
+                    } else {
+                        throw new Error("Invalid events data format");
+                    }
+                    
                 } catch (e) {
-                    // Some JSON parse errors happened. May be because of first time authentication
-                    // Wait until reaching last line of the output because the last line may be a valid events JSON
-                    error = true;
+                    global.logError("[NextCloud Calendar] Error processing events: " + e.toString());
+                    
+                    // Create error window
+                    this.window = CalendarUtility.window(this.cornerradius, this.textcolor, this.bgcolor, this.transparency);
+                    this.showErrorMessage(e.toString());
+                    this.setContent(this.window);
                 }
+                
+                this.updateInProgress = false;
             });
-            if (error) {
-                let label = CalendarUtility.label(_("Unable to retrieve events..."), this.zoom, this.textcolor);
-                this.window.add(label);
-            }
+            
         } catch (e) {
-            global.logError(e);
-        } finally {
+            global.logError("[NextCloud Calendar] Fatal error in retrieveEvents: " + e.toString());
             this.updateInProgress = false;
         }
     },

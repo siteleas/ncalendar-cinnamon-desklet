@@ -87,7 +87,7 @@ install_system_packages() {
             sudo apt-get install -y python3-requests python3-lxml || true
             
             # Install additional development tools if needed
-            sudo apt-get install -y python3-dev python3-setuptools || true
+            sudo apt-get install -y python3-dev python3-setuptools jq || true
             
             # Install emoji font support
             sudo apt-get install -y fonts-noto-color-emoji fonts-symbola || true
@@ -119,7 +119,7 @@ install_system_packages() {
             sudo $PKG_MGR install -y python3-requests python3-lxml || true
             
             # Install additional development tools if needed
-            sudo $PKG_MGR install -y python3-devel python3-setuptools || true
+            sudo $PKG_MGR install -y python3-devel python3-setuptools jq || true
             
             # Install emoji font support
             sudo $PKG_MGR install -y google-noto-emoji-fonts || true
@@ -144,7 +144,7 @@ install_system_packages() {
             fi
             
             # Try to install required packages via system package manager first
-            sudo pacman -S --noconfirm python-requests python-lxml || true
+            sudo pacman -S --noconfirm python-requests python-lxml jq || true
             
             # Install emoji font support
             sudo pacman -S --noconfirm noto-fonts-emoji || true
@@ -169,7 +169,7 @@ install_system_packages() {
             fi
             
             # Try to install required packages via system package manager first
-            sudo zypper install -y python3-requests python3-lxml || true
+            sudo zypper install -y python3-requests python3-lxml jq || true
             
             # Install emoji font support
             sudo zypper install -y noto-coloremoji-fonts || true
